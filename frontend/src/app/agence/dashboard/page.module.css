@@ -1036,6 +1036,7 @@
   flex-shrink: 0;
   height: 100vh;
   overflow-y: auto;
+  overscroll-behavior: none;
   box-shadow: 2px 0 10px rgba(0,0,0,0.03);
 }
 
@@ -1143,6 +1144,7 @@
   background: #f4f7f5;
   overflow-y: auto;
   height: 100vh;
+  overscroll-behavior: none;
 }
 
 .tabContentFadeIn {

@@ -36,10 +36,17 @@ export default function Home() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   
   const [isAgencyLoggedIn, setIsAgencyLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     const status = localStorage.getItem("safetrip_agency_logged_in") === "true";
     setIsAgencyLoggedIn(status);
+
+    const loggedIn = localStorage.getItem("safetrip_logged_in") === "true";
+    const role = localStorage.getItem("safetrip_user_role");
+    setIsLoggedIn(loggedIn);
+    setUserRole(role);
   }, []);
 
   const toggleConnection = (e: React.MouseEvent) => {
@@ -478,7 +485,15 @@ export default function Home() {
             {isAgencyLoggedIn && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
           </nav>
           <button onClick={toggleConnection} className={styles.headerBtn}>
-            Connexion
+            {!isLoggedIn ? (
+              "Connexion"
+            ) : userRole === "admin" ? (
+              "Admin"
+            ) : userRole === "agency" ? (
+              "Mon Agence"
+            ) : (
+              "Mon Espace"
+            )}
           </button>
         </div>
 

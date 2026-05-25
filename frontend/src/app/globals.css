@@ -25,6 +25,7 @@ body {
   color: var(--text-gray);
   background-color: var(--bg-white);
   scroll-behavior: smooth;
+  overscroll-behavior: none;
 }
 
 a {
