@@ -36,14 +36,9 @@ export const signup = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Champs requis manquants: email, password, fullName.' });
     }
 
-    // Determine role from email domains or terms
-    const lowerEmail = email.toLowerCase();
-    let role: 'client' | 'agency' | 'admin' = 'client';
-    if (lowerEmail.includes('admin')) {
-      role = 'admin';
-    } else if (lowerEmail.includes('agence') || lowerEmail.includes('finexs') || lowerEmail.includes('buca') || lowerEmail.includes('general') || lowerEmail.includes('touristique') || lowerEmail.includes('men')) {
-      role = 'agency';
-    }
+    // Security Fix: All publicly registered users default to 'client' role.
+    // Promotion to 'agency' or 'admin' must be performed manually in the database for security.
+    const role: 'client' | 'agency' | 'admin' = 'client';
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
