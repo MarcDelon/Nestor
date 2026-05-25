@@ -75,7 +75,7 @@ export const signup = async (req: Request, res: Response) => {
       });
     } else {
       // Local fallback simulation
-      const exists = simulatedUsers.some(u => u.email.toLowerCase() === lowerEmail);
+      const exists = simulatedUsers.some(u => u.email.toLowerCase() === email.toLowerCase());
       if (exists) {
         return res.status(400).json({ error: 'Un utilisateur avec cette adresse email existe déjà (Simulation).' });
       }
