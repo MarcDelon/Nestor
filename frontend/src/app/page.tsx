@@ -51,7 +51,15 @@ export default function Home() {
 
   const toggleConnection = (e: React.MouseEvent) => {
     e.stopPropagation();
-    window.location.href = "/agence/dashboard";
+    if (!isLoggedIn) {
+      window.location.href = "/login";
+    } else if (userRole === "admin") {
+      window.location.href = "/admin/dashboard";
+    } else if (userRole === "agency") {
+      window.location.href = "/agence/dashboard";
+    } else {
+      window.location.href = "/client/dashboard";
+    }
   };
   
   const todayDate = new Date();
@@ -482,7 +490,9 @@ export default function Home() {
             <Link href="/reserver">Réserver</Link>
             <a href="#agences">Agences</a>
             <a href="#tracabilite">Traçabilité</a>
-            {isAgencyLoggedIn && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
+            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
+            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Agence</Link>}
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Espace Voyageur</Link>}
           </nav>
           <button onClick={toggleConnection} className={styles.headerBtn}>
             {!isLoggedIn ? (
