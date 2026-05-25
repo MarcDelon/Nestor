@@ -1,0 +1,796 @@
+/* ===== GLOBAL LAYOUT ===== */
+.main {
+  min-height: 100vh;
+  background: linear-gradient(165deg, #f7fafc 0%, #edf2f7 100%);
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  color: #2d3748;
+}
+
+/* ===== HEADER ===== */
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 0 40px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+.headerContent {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logoContainer {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.logoImage {
+  height: 38px;
+  width: auto;
+  object-fit: contain;
+}
+
+/* ===== STEPPER ===== */
+.stepperContainer {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 75px 30px 20px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 20px;
+}
+
+.stepItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+.stepCircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  transition: all 0.4s ease;
+}
+
+.stepCircleActive {
+  background: #00c070;
+  color: #ffffff;
+  border-color: #00c070;
+  box-shadow: 0 0 15px rgba(0, 192, 112, 0.3);
+}
+
+.stepCircleDone {
+  background: rgba(0, 192, 112, 0.2);
+  color: #00c070;
+  border-color: rgba(0, 192, 112, 0.4);
+}
+
+.stepLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.3);
+  transition: color 0.3s;
+}
+
+.stepLabelActive {
+  color: #2d3748;
+}
+
+.stepLabelDone {
+  color: #00c070;
+}
+
+.stepLine {
+  width: 60px;
+  height: 2px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 0 12px;
+  transition: background 0.3s;
+}
+
+.stepLineDone {
+  background: rgba(0, 192, 112, 0.4);
+}
+
+/* ===== STEP 1: BUS SEAT MAP ===== */
+.seatSection {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.busContainer {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 10px 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02);
+}
+
+.busFront {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 0 6px;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.busFrontIcon {
+  width: 14px;
+  height: 14px;
+  color: rgba(0, 0, 0, 0.3);
+}
+
+.seatGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 20px 1fr 1fr;
+  gap: 4px;
+  max-width: 220px;
+  margin: 0 auto;
+}
+
+.seat {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.45rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1.5px solid transparent;
+  position: relative;
+}
+
+.seatAvailable {
+  background: rgba(0, 192, 112, 0.12);
+  color: rgba(0, 192, 112, 0.7);
+  border-color: rgba(0, 192, 112, 0.2);
+}
+
+.seatAvailable:hover {
+  background: rgba(0, 192, 112, 0.25);
+  border-color: rgba(0, 192, 112, 0.5);
+  transform: scale(1.08);
+}
+
+.seatOccupied {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.15);
+  border-color: rgba(0, 0, 0, 0.06);
+  cursor: not-allowed;
+}
+
+.seatSelected {
+  background: rgba(252, 209, 22, 0.2);
+  color: #d4a000;
+  border-color: #d4a000;
+  box-shadow: 0 0 12px rgba(252, 209, 22, 0.2);
+  transform: scale(1.08);
+}
+
+.seatVip {
+  background: rgba(0, 103, 60, 0.2);
+  color: #00c070;
+  border-color: rgba(0, 192, 112, 0.3);
+}
+
+.seatVip:hover {
+  background: rgba(0, 103, 60, 0.35);
+  border-color: rgba(0, 192, 112, 0.6);
+  transform: scale(1.08);
+}
+
+.aisle {
+  width: 20px;
+  display: block;
+}
+
+.seatLegend {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.52rem;
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 600;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+/* ===== TRIP SUMMARY SIDEBAR ===== */
+.summaryCard {
+  width: 300px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 80px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02);
+}
+
+.summaryTitle {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #2d3748;
+  margin: 0;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summaryLabel {
+  font-size: 0.65rem;
+  color: rgba(0, 0, 0, 0.4);
+  font-weight: 600;
+}
+
+.summaryValue {
+  font-size: 0.72rem;
+  color: #2d3748;
+  font-weight: 700;
+}
+
+.summaryDivider {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.summaryTotal {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #00673C;
+}
+
+.continueBtn {
+  background: #00c070;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.78rem;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.continueBtn:hover {
+  background: #00a060;
+  box-shadow: 0 4px 20px rgba(0, 192, 112, 0.3);
+}
+
+.continueBtn:disabled {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.2);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ===== STEP 2: PAYMENT ===== */
+.paymentSection {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.paymentMethods {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.paymentMethodCard {
+  background: #ffffff;
+  border: 2px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.01);
+}
+
+.paymentMethodCard:hover {
+  border-color: rgba(0, 192, 112, 0.3);
+  background: rgba(0, 192, 112, 0.04);
+}
+
+.paymentMethodCardActive {
+  border-color: #00c070;
+  background: rgba(0, 192, 112, 0.08);
+  box-shadow: 0 0 20px rgba(0, 192, 112, 0.1);
+}
+
+.paymentIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.paymentMethodInfo {
+  flex: 1;
+}
+
+.paymentMethodName {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #2d3748;
+  margin-bottom: 3px;
+}
+
+.paymentMethodDesc {
+  font-size: 0.65rem;
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.paymentRadio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.paymentRadioActive {
+  border-color: #00c070;
+  background: #00c070;
+}
+
+.paymentFormArea {
+  margin-top: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02);
+}
+
+.paymentFormTitle {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #2d3748;
+  margin-bottom: 14px;
+}
+
+.paymentInput {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 0.8rem;
+  color: #2d3748;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.paymentInput:focus {
+  border-color: rgba(0, 192, 112, 0.5);
+}
+
+.payBtn {
+  width: 100%;
+  background: #00c070;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.82rem;
+  padding: 13px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.payBtn:hover {
+  background: #00a060;
+  box-shadow: 0 4px 20px rgba(0, 192, 112, 0.3);
+}
+
+.payBtn:disabled {
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.2);
+  cursor: not-allowed;
+}
+
+/* Loading spinner */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ===== STEP 3: TICKET ===== */
+.ticketSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.ticketSuccessMsg {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.ticketSuccessMsg h2 {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #00c070;
+  margin: 0 0 6px;
+}
+
+.ticketSuccessMsg p {
+  font-size: 0.72rem;
+  color: rgba(0, 0, 0, 0.5);
+  margin: 0;
+}
+
+.ticketCard {
+  width: 100%;
+  max-width: 680px;
+  background: #ffffff;
+  border-radius: 16px;
+  overflow: hidden;
+  color: #1a1a2e;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.ticketHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 28px;
+  background: linear-gradient(135deg, #00673C 0%, #00c070 100%);
+  color: #ffffff;
+}
+
+.ticketHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ticketLogo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.ticketHeaderTitle {
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+}
+
+.ticketHeaderSub {
+  font-size: 0.6rem;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.ticketAgencyLogo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.ticketBody {
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ticketRoute {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 18px;
+  border-bottom: 2px dashed #e0e0e0;
+}
+
+.ticketCity {
+  text-align: center;
+}
+
+.ticketCityCode {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #00673C;
+  line-height: 1;
+}
+
+.ticketCityName {
+  font-size: 0.65rem;
+  color: #666;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.ticketRouteMiddle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ticketOperator {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #00673C;
+}
+
+.ticketRouteLine {
+  width: 80px;
+  height: 2px;
+  background: #00c070;
+  position: relative;
+}
+
+.ticketRouteDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00c070;
+  position: absolute;
+  top: -3px;
+  left: calc(50% - 4px);
+}
+
+.ticketDuration {
+  font-size: 0.6rem;
+  color: #999;
+  font-weight: 600;
+}
+
+.ticketDetailsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.ticketDetail {
+  background: #f7f8fa;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.ticketDetailLabel {
+  font-size: 0.55rem;
+  color: #999;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ticketDetailValue {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+.ticketDetailValueGreen {
+  color: #00673C;
+}
+
+.ticketDetailValueGold {
+  color: #c49000;
+}
+
+.ticketPassengerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+}
+
+.ticketPassengerInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ticketPassengerName {
+  font-size: 0.85rem;
+  font-weight: 900;
+  color: #1a1a2e;
+}
+
+.ticketPassengerContact {
+  font-size: 0.62rem;
+  color: #888;
+  font-weight: 600;
+}
+
+.ticketQr {
+  background: #ffffff;
+  border: 2px solid #eee;
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.ticketFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px;
+  background: #f7f8fa;
+  border-top: 1px solid #eee;
+}
+
+.ticketFooterText {
+  font-size: 0.58rem;
+  color: #999;
+  font-weight: 600;
+}
+
+.ticketId {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #00673C;
+  font-family: monospace;
+}
+
+.downloadBtn {
+  background: linear-gradient(135deg, #00673C 0%, #00c070 100%);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  padding: 14px 28px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 20px rgba(0, 192, 112, 0.3);
+}
+
+.downloadBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 192, 112, 0.4);
+}
+
+.backLink {
+  font-size: 0.72rem;
+  color: rgba(0, 0, 0, 0.5);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+
+.backLink:hover {
+  color: #00c070;
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  .main {
+    background: #ffffff !important;
+    min-height: auto;
+  }
+
+  .header,
+  .stepper,
+  .downloadBtn,
+  .backLink,
+  .ticketSuccessMsg {
+    display: none !important;
+  }
+
+  .ticketCard {
+    box-shadow: none;
+    border: 1px solid #ddd;
+    max-width: 100%;
+    border-radius: 0;
+  }
+
+  .ticketSection {
+    padding: 0;
+  }
+
+  .stepperContainer {
+    padding: 0;
+  }
+}

@@ -1,0 +1,917 @@
+"use client";
+
+import styles from "./page.module.css";
+import Image from "next/image";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+
+const agencies = [
+  { name: 'Finexs', image: '/images/finexs.png' },
+  { name: 'Buca Voyage', image: '/images/bucavoyage.png' },
+  { name: 'General', image: '/images/General.png' },
+  { name: 'Touristique', image: '/images/Touristique.png' },
+  { name: 'Men Travel', image: '/images/mentravel.png' },
+];
+
+const teamSlides = [
+  { src: "/images/about_us_team.png", name: "L'Équipe Fondatrice", role: "6 experts passionnés" },
+  { src: "/images/member1.jpg", name: "Marc Ndip", role: "Fondateur & CEO" },
+  { src: "/images/member2.png", name: "Carine Bella", role: "Co-fondatrice & CTO" },
+  { src: "/images/member3.jpg", name: "Jean-Pierre Talla", role: "Directeur des Opérations (COO)" },
+  { src: "/images/member4.png", name: "Sandra Kamdem", role: "Directrice Logistique" },
+  { src: "/images/member5.jpg", name: "Patrick Fotso", role: "Product Manager" },
+  { src: "/images/member6.png", name: "Syntyche Toukam", role: "Lead Fullstack Dev" },
+];
+
+export default function Home() {
+  const [scrolled, setScrolled] = useState(false);
+  const [showStickySearch, setShowStickySearch] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
+  const [passengers, setPassengers] = useState(1);
+  const [departureDate, setDepartureDate] = useState("");
+  const [returnDate, setReturnDate] = useState("");
+
+  // Manage active dropdown key: 'hero-dep' | 'hero-ret' | 'hero-pass' | 'header-dep' | 'header-ret' | 'header-pass' | null
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  
+  const [isAgencyLoggedIn, setIsAgencyLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const status = localStorage.getItem("safetrip_agency_logged_in") === "true";
+    setIsAgencyLoggedIn(status);
+  }, []);
+
+  const toggleConnection = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.location.href = "/agence/dashboard";
+  };
+  
+  const todayDate = new Date();
+  const [depCalMonth, setDepCalMonth] = useState(todayDate.getMonth());
+  const [depCalYear, setDepCalYear] = useState(todayDate.getFullYear());
+  const [retCalMonth, setRetCalMonth] = useState(todayDate.getMonth());
+  const [retCalYear, setRetCalYear] = useState(todayDate.getFullYear());
+
+  // Localized Time & Cameroonian Weather states
+  const [currentTime, setCurrentTime] = useState("");
+  const [showWeather, setShowWeather] = useState(false);
+  const [cityIdx, setCityIdx] = useState(0);
+
+  const [citiesWeather, setCitiesWeather] = useState([
+    { city: "Yaoundé", temp: "24°", desc: "Nuageux ☁️", lat: 3.8480, lon: 11.5021 },
+    { city: "Douala", temp: "28°", desc: "Humide 🌧️", lat: 4.0511, lon: 9.7679 },
+    { city: "Bafoussam", temp: "21°", desc: "Brumeux 🌫️", lat: 5.4771, lon: 10.4176 },
+    { city: "Garoua", temp: "35°", desc: "Ensoleillé ☀️", lat: 9.3003, lon: 13.3932 },
+    { city: "Kribi", temp: "29°", desc: "Orageux ⛈️", lat: 2.9506, lon: 9.9079 }
+  ]);
+
+  // Asynchronously fetch live Cameroonian hub weather from free Open-Meteo API
+  useEffect(() => {
+    const fetchLiveWeather = async () => {
+      try {
+        const liveData = await Promise.all(
+          citiesWeather.map(async (c) => {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&timezone=auto`;
+            const res = await fetch(url);
+            if (!res.ok) return c;
+            const data = await res.json();
+            if (data && data.current) {
+              const liveTemp = Math.round(data.current.temperature_2m);
+              const code = data.current.weather_code;
+              
+              // WMO Weather interpretation codes
+              let desc = "Doux 🌤️";
+              if (code === 0) desc = "Ensoleillé ☀️";
+              else if (code >= 1 && code <= 3) desc = "Nuageux ☁️";
+              else if (code === 45 || code === 48) desc = "Brumeux 🌫️";
+              else if (code >= 51 && code <= 65) desc = "Pluvieux 🌧️";
+              else if (code >= 80 && code <= 82) desc = "Averses 🌧️";
+              else if (code >= 95) desc = "Orageux ⛈️";
+              else desc = "Couvert ☁️";
+
+              return { ...c, temp: `${liveTemp}°`, desc };
+            }
+            return c;
+          })
+        );
+        setCitiesWeather(liveData);
+      } catch (err) {
+        console.error("Erreur lors de la synchronisation de la météo en temps réel:", err);
+      }
+    };
+
+    fetchLiveWeather();
+    const weatherCacheTimer = setInterval(fetchLiveWeather, 600000); // Live sync weather caching interval of 10 minutes
+    return () => clearInterval(weatherCacheTimer);
+  }, []);
+
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      setCurrentTime(`${hh}:${mm}`);
+    };
+    updateClock();
+    const clockTimer = setInterval(updateClock, 1000);
+
+    const toggleTimer = setInterval(() => {
+      setShowWeather(prev => {
+        const next = !prev;
+        if (next) {
+          setCityIdx(i => (i + 1) % 5); // Rotate through the 5 cities when transitioning to weather
+        }
+        return next;
+      });
+    }, 5000);
+
+    return () => {
+      clearInterval(clockTimer);
+      clearInterval(toggleTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClose = () => {
+      setActiveDropdown(null);
+    };
+    window.addEventListener("click", handleClose);
+    return () => {
+      window.removeEventListener("click", handleClose);
+    };
+  }, []);
+
+  const nextMonth = (isDep: boolean) => {
+    if (isDep) {
+      if (depCalMonth === 11) {
+        setDepCalMonth(0);
+        setDepCalYear(prev => prev + 1);
+      } else {
+        setDepCalMonth(prev => prev + 1);
+      }
+    } else {
+      if (retCalMonth === 11) {
+        setRetCalMonth(0);
+        setRetCalYear(prev => prev + 1);
+      } else {
+        setRetCalMonth(prev => prev + 1);
+      }
+    }
+  };
+
+  const prevMonth = (isDep: boolean) => {
+    if (isDep) {
+      if (depCalMonth === 0) {
+        setDepCalMonth(11);
+        setDepCalYear(prev => prev - 1);
+      } else {
+        setDepCalMonth(prev => prev - 1);
+      }
+    } else {
+      if (retCalMonth === 0) {
+        setRetCalMonth(11);
+        setRetCalYear(prev => prev - 1);
+      } else {
+        setRetCalMonth(prev => prev - 1);
+      }
+    }
+  };
+
+  const selectDate = (isDep: boolean, year: number, month: number, day: number) => {
+    const yyyy = year;
+    const mm = String(month + 1).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    if (isDep) {
+      setDepartureDate(dateStr);
+    } else {
+      setReturnDate(dateStr);
+    }
+    setActiveDropdown(null);
+  };
+
+  const formatDateDisplay = (dateString: string) => {
+    if (!dateString) return "Choisir une date";
+    const [year, month, day] = dateString.split("-");
+    const monthNamesShort = ["Janv.", "Févr.", "Mars", "Avril", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
+    return `${day} ${monthNamesShort[parseInt(month, 10) - 1]} ${year}`;
+  };
+
+  const renderCalendar = (isDep: boolean, dropdownKey: string) => {
+    const month = isDep ? depCalMonth : retCalMonth;
+    const year = isDep ? depCalYear : retCalYear;
+    const selectedDate = isDep ? departureDate : returnDate;
+
+    const monthNames = [
+      "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+      "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    ];
+
+    const daysCount = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) {
+      cells.push(null);
+    }
+    for (let d = 1; d <= daysCount; d++) {
+      cells.push(d);
+    }
+
+    const todayObj = new Date();
+    const todayDay = todayObj.getDate();
+    const todayMonth = todayObj.getMonth();
+    const todayYear = todayObj.getFullYear();
+
+    return (
+      <div className={styles.calendarPopover} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.calendarHeader}>
+          <span className={styles.calendarMonthYear}>
+            {monthNames[month]} {year}
+          </span>
+          <div className={styles.calendarNavBtns}>
+            <button type="button" className={styles.calendarNavBtn} onClick={(e) => { e.stopPropagation(); prevMonth(isDep); }}>
+              ‹
+            </button>
+            <button type="button" className={styles.calendarNavBtn} onClick={(e) => { e.stopPropagation(); nextMonth(isDep); }}>
+              ›
+            </button>
+          </div>
+        </div>
+        <div className={styles.calendarGrid}>
+          {["Di", "Lu", "Ma", "Me", "Je", "Ve", "Sa"].map(d => (
+            <div key={d} className={styles.calendarDayHeader}>{d}</div>
+          ))}
+          {cells.map((day, idx) => {
+            if (day === null) {
+              return <div key={`empty-${idx}`} className={styles.calendarDayEmpty} />;
+            }
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const isSelected = selectedDate === dateStr;
+            const isToday = todayDay === day && todayMonth === month && todayYear === year;
+
+            return (
+              <button
+                key={day}
+                type="button"
+                className={`${styles.calendarDayCell} ${isSelected ? styles.calendarDaySelected : ""} ${isToday ? styles.calendarDayToday : ""}`}
+                onClick={(e) => { e.stopPropagation(); selectDate(isDep, year, month, day); }}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+        <div className={styles.calendarFooter}>
+          <button 
+            type="button" 
+            className={styles.calendarFooterBtn} 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              if (isDep) { setDepartureDate(""); } 
+              else { setReturnDate(""); } 
+              setActiveDropdown(null);
+            }}
+          >
+            Effacer
+          </button>
+          <button 
+            type="button" 
+            className={styles.calendarFooterBtn} 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              selectDate(isDep, todayYear, todayMonth, todayDay); 
+            }}
+          >
+            Aujourd'hui
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSearchCapsule = (isHeader: boolean) => {
+    const depKey = isHeader ? 'header-dep' : 'hero-dep';
+    const retKey = isHeader ? 'header-ret' : 'hero-ret';
+    const passKey = isHeader ? 'header-pass' : 'hero-pass';
+
+    return (
+      <div className={`${styles.searchCapsuleContainer} ${isHeader ? styles.headerSearchVersion : ""}`}>
+        {/* Trip Type Selector */}
+        <div className={styles.tripTypeSelector}>
+          <button 
+            type="button"
+            className={`${styles.tripTypeTab} ${!isRoundTrip ? styles.tripTypeTabActive : ""}`}
+            onClick={(e) => { e.stopPropagation(); setIsRoundTrip(false); }}
+          >
+            Aller simple
+          </button>
+          <button 
+            type="button"
+            className={`${styles.tripTypeTab} ${isRoundTrip ? styles.tripTypeTabActive : ""}`}
+            onClick={(e) => { e.stopPropagation(); setIsRoundTrip(true); }}
+          >
+            Aller-retour
+          </button>
+        </div>
+
+        {/* Capsule Bar */}
+        <div className={styles.searchCapsuleBar}>
+          {/* Departure */}
+          <div className={styles.capsuleItem}>
+            <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="8"></circle>
+            </svg>
+            <input type="text" placeholder="Départ" className={styles.capsuleInput} />
+          </div>
+
+          {/* Destination */}
+          <div className={styles.capsuleItem}>
+            <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="8"></circle>
+            </svg>
+            <input type="text" placeholder="Destination" className={styles.capsuleInput} />
+          </div>
+
+          {/* Date Départ */}
+          <div className={styles.capsuleItem} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === depKey ? null : depKey); }}>
+            <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <div className={styles.capsuleValueDisplay}>
+              {departureDate ? formatDateDisplay(departureDate) : "Aujourd'hui"}
+            </div>
+            {activeDropdown === depKey && renderCalendar(true, depKey)}
+          </div>
+
+          {/* Date Retour (Conditional) */}
+          <div className={`${styles.capsuleItem} ${!isRoundTrip ? styles.capsuleDisabled : ""}`} onClick={(e) => { e.stopPropagation(); if (isRoundTrip) { setActiveDropdown(activeDropdown === retKey ? null : retKey); } }}>
+            <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <div className={styles.capsuleValueDisplay}>
+              {returnDate ? formatDateDisplay(returnDate) : "Date de retour"}
+            </div>
+            {activeDropdown === retKey && renderCalendar(false, retKey)}
+          </div>
+
+          {/* Seats/Passengers Selection */}
+          <div className={styles.capsuleItem} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === passKey ? null : passKey); }}>
+            <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <div className={styles.capsulePassengerInfo}>
+              <div className={styles.capsulePassengerTitle}>
+                {passengers} {passengers > 1 ? "passagers" : "passager"}
+              </div>
+              <div className={styles.capsulePassengerSubtitle}>
+                Aucune réduction
+              </div>
+            </div>
+
+            {activeDropdown === passKey && (
+              <div className={styles.passengerPopover} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.popoverTitle}>Nombre de places</div>
+                <div className={styles.popoverCounterRow}>
+                  <button 
+                    type="button"
+                    className={styles.counterBtn}
+                    disabled={passengers <= 1}
+                    onClick={(e) => { e.stopPropagation(); setPassengers(Math.max(1, passengers - 1)); }}
+                  >
+                    -
+                  </button>
+                  <span className={styles.counterValue}>{passengers}</span>
+                  <button 
+                    type="button"
+                    className={styles.counterBtn}
+                    disabled={passengers >= 10}
+                    onClick={(e) => { e.stopPropagation(); setPassengers(Math.min(10, passengers + 1)); }}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Submit Button */}
+          <Link href="/reserver" className={styles.capsuleSubmitBtn} style={{ textDecoration: "none" }}>
+            Rechercher
+          </Link>
+        </div>
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % teamSlides.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    // Fades out the scroll down indicator and triggers header search
+    const handleScroll = () => {
+      if (window.scrollY > 60) {
+        setScrolled(true);
+      } else {
+        setScrolled(false);
+      }
+
+      if (window.scrollY > 450) {
+        setShowStickySearch(true);
+      } else {
+        setShowStickySearch(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+
+    // Intersection Observer for professional scroll reveal animations
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add(styles.visible);
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -60px 0px" }
+    );
+
+    const revealElements = document.querySelectorAll(
+      `.${styles.reveal}, .${styles.revealLeft}, .${styles.revealRight}`
+    );
+    revealElements.forEach((el) => observer.observe(el));
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      observer.disconnect();
+    };
+  }, []);
+
+  return (
+    <main className={styles.main}>
+      {/* Header */}
+      <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""}`}>
+        <div className={styles.headerContent}>
+          <div className={styles.logoContainer}>
+            <img 
+              src="/images/logo-removebg-preview (2).png" 
+              alt="SafeTrip Logo" 
+              className={styles.logoImage}
+            />
+          </div>
+          <nav className={styles.nav}>
+            <Link href="/reserver">Réserver</Link>
+            <a href="#agences">Agences</a>
+            <a href="#tracabilite">Traçabilité</a>
+            {isAgencyLoggedIn && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
+          </nav>
+          <button onClick={toggleConnection} className={styles.headerBtn}>
+            Connexion
+          </button>
+        </div>
+
+        {/* Sticky Search Bar (BlaBlaCar style) */}
+        {showStickySearch && (
+          <div className={`${styles.headerSearchContainer} ${styles.headerSearchVisible}`}>
+            <div className={styles.headerSearchInner}>
+              {renderSearchCapsule(true)}
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Hero Section */}
+      <section className={styles.hero}>
+        <div className={styles.heroContentGrid}>
+          {/* Left Column: Bold Tagline and Subtitle */}
+          <div className={styles.heroTextColumn}>
+            <h1 className={styles.heroTitle}>
+              Bus, agences, traçabilité : SafeTrip vous emmène où vous voulez.<img 
+                src="/images/logo-removebg-preview (2).png" 
+                alt="SafeTrip Logo" 
+                className={styles.heroTitleLogo} 
+              />
+            </h1>
+            <p className={styles.heroSubtitle}>
+              Trouvez des billets de bus à petits prix pour votre prochain voyage.<br />
+              Comparez et réservez votre prochain trajet en un clin d'œil avec SafeTrip.
+            </p>
+          </div>
+
+          {/* Right Column: High-performance Rounded Video Card */}
+          <div className={styles.heroVideoColumn}>
+            <div className={styles.heroVideoWrapper}>
+              <video 
+                autoPlay 
+                loop 
+                muted 
+                playsInline 
+                className={styles.heroVideo}
+                poster="/bus.png"
+              >
+                <source src="/bus-video.mp4" type="video/mp4" />
+                Votre navigateur ne supporte pas la lecture de cette vidéo.
+              </video>
+            </div>
+
+            {/* Dynamic Time & Weather Premium Card Widget */}
+            <div className={styles.heroWeatherWidgetCard}>
+              {!showWeather ? (
+                /* Time Card View */
+                <div className={styles.widgetCardContent} key="time">
+                  <div className={styles.cardHeaderRow}>
+                    <div className={styles.cardTitleBox}>
+                      <svg className={styles.cardHeaderIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                      </svg>
+                      <span className={styles.cardHeaderTitle}>HEURE {citiesWeather[cityIdx].city.toUpperCase()}</span>
+                    </div>
+                  </div>
+                  
+                  <div className={styles.cardMainValue}>
+                    {currentTime}
+                  </div>
+                  
+                  <div className={styles.cardFooterRow}>
+                    <span className={styles.cardFooterText}>Cameroun</span>
+                    <div className={styles.cardIndicators}>
+                      <span className={`${styles.cardIndicatorDot} ${styles.cardIndicatorActive}`}></span>
+                      <span className={styles.cardIndicatorDot}></span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Weather Card View */
+                <div className={styles.widgetCardContent} key="weather">
+                  <div className={styles.cardHeaderRow}>
+                    <div className={styles.cardTitleBox}>
+                      <svg className={styles.cardHeaderIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                        <circle cx="12" cy="10" r="3"></circle>
+                      </svg>
+                      <span className={styles.cardHeaderTitle}>MÉTÉO {citiesWeather[cityIdx].city.toUpperCase()}</span>
+                    </div>
+                    {/* Render cloud or sun based on description */}
+                    <div className={styles.cardWeatherIconBox}>
+                      {citiesWeather[cityIdx].city === "Garoua" ? (
+                        <svg className={styles.weatherConditionIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="5"></circle>
+                          <line x1="12" y1="1" x2="12" y2="3"></line>
+                          <line x1="12" y1="21" x2="12" y2="23"></line>
+                          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                          <line x1="1" y1="12" x2="3" y2="12"></line>
+                          <line x1="21" y1="12" x2="23" y2="12"></line>
+                          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                      ) : (
+                        <svg className={styles.weatherConditionIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className={styles.cardMainValueWeather}>
+                    {citiesWeather[cityIdx].temp}
+                  </div>
+                  
+                  <div className={styles.cardFooterRow}>
+                    <span className={styles.cardFooterWeatherDesc}>{citiesWeather[cityIdx].desc.split(" ")[0]}</span>
+                    <div className={styles.cardIndicators}>
+                      <span className={styles.cardIndicatorDot}></span>
+                      <span className={`${styles.cardIndicatorDot} ${styles.cardIndicatorActive}`}></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Horizontal Search Widget Container */}
+        <div className={`container ${styles.searchCapsuleSection}`}>
+          {renderSearchCapsule(false)}
+        </div>
+
+        {/* Scroll Down Indicator */}
+        <div className={`${styles.scrollDown} ${scrolled ? styles.hidden : ""}`} onClick={() => document.getElementById('agences')?.scrollIntoView({ behavior: 'smooth' })}>
+          <span className={styles.scrollText}>Défiler</span>
+          <div className={styles.mouse}>
+            <div className={styles.wheel}></div>
+          </div>
+        </div>
+      </section>
+
+      {/* Agencies Section */}
+      <section id="agences" className={`${styles.agenciesSection} ${styles.reveal}`}>
+        <div className="container">
+          <h2 className={styles.sectionTitle}>Nos Agences Partenaires</h2>
+          <div className={styles.marqueeContainer}>
+            <div className={styles.marqueeTrack}>
+              {[...agencies, ...agencies].map((agency, index) => (
+                <div key={`${agency.name}-${index}`} className={styles.agencyCard}>
+                  {agency.image && (
+                    <Image src={agency.image} alt={`Logo ${agency.name}`} width={50} height={50} className={styles.agencyLogo} />
+                  )}
+                  <h3>{agency.name}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Qui Sommes-Nous Section */}
+      <section id="qui-sommes-nous" className={`${styles.aboutSection} ${styles.reveal}`}>
+        <div className={`container ${styles.aboutGrid}`}>
+          {/* Left Column: Interactive Slider */}
+          <div className={`${styles.aboutImageColumn} ${styles.revealLeft}`}>
+            <div className={styles.aboutImageWrapper}>
+              <div className={styles.sliderContainer}>
+                {teamSlides.map((slide, idx) => (
+                  <div 
+                    key={idx}
+                    className={`${styles.slide} ${idx === currentSlide ? styles.activeSlide : ""}`}
+                  >
+                    <img 
+                      src={slide.src} 
+                      alt={slide.name} 
+                      className={styles.aboutImage}
+                    />
+                    <div className={styles.imageOverlayBadge}>
+                      <span className={styles.badgeNumber}>{slide.name}</span>
+                      <span className={styles.badgeText}>{slide.role}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Slider Navigation Controls */}
+              <button 
+                className={styles.slideArrowLeft}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentSlide((prev) => (prev - 1 + teamSlides.length) % teamSlides.length);
+                }}
+              >
+                ‹
+              </button>
+              <button 
+                className={styles.slideArrowRight}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentSlide((prev) => (prev + 1) % teamSlides.length);
+                }}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+          
+          {/* Right Column: Text & Stats */}
+          <div className={`${styles.aboutTextColumn} ${styles.revealRight}`}>
+            <span className={styles.aboutSectionBadge}>QUI SOMMES-NOUS ?</span>
+            <h2 className={styles.aboutTitle}>Une équipe passionnée au service de votre mobilité</h2>
+            <p className={styles.aboutDescription}>
+              Chez <strong>SafeTrip</strong>, notre mission est de révolutionner le transport routier au Cameroun et en Afrique. Nous sommes une équipe de professionnels passionnés de technologie et de logistique, unis par une vision commune : rendre vos voyages plus simples, plus sûrs et 100% transparents.
+            </p>
+            <p className={styles.aboutDescription}>
+              En collaborant avec les plus grandes agences de transport du pays, nous regroupons toutes les offres sur une marketplace unique pour vous éviter les files d'attente. De plus, notre innovation exclusive de traçabilité par QR code garantit que vos bagages et colis arrivent à destination en toute sérénité.
+            </p>
+            
+            <div className={styles.aboutStatsGrid}>
+              <div className={styles.statCard}>
+                <h4 className={styles.statVal}>50k+</h4>
+                <p className={styles.statLbl}>Voyageurs satisfaits</p>
+              </div>
+              <div className={styles.statCard}>
+                <h4 className={styles.statVal}>15+</h4>
+                <p className={styles.statLbl}>Agences partenaires</p>
+              </div>
+              <div className={styles.statCard}>
+                <h4 className={styles.statVal}>24/7</h4>
+                <p className={styles.statLbl}>Support & Assistance</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Traceability Section */}
+      <section id="tracabilite" className={styles.traceabilitySection}>
+        <div className={`container ${styles.traceabilityContent}`}>
+          {/* Left Column: Premium Feature Cards */}
+          <div className={`${styles.traceabilityText} ${styles.revealLeft}`}>
+            <span className={styles.traceabilityBadge}>SUIVI & SÉCURITÉ</span>
+            <h2 className={styles.traceabilityTitle}>Traçabilité 100% Numérique</h2>
+            <p className={styles.traceabilityDescription}>
+              Ne perdez plus jamais la trace de vos bagages ou de vos colis. Grâce à notre système innovant de QR code, suivez chaque étape de leur parcours en temps réel sur votre smartphone.
+            </p>
+            
+            <div className={styles.traceabilityFeatureList}>
+              <div className={styles.traceabilityFeatureItem}>
+                <div className={styles.featureIconBox}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div>
+                  <h4>Génération de QR code unique</h4>
+                  <p>Chaque bagage et colis reçoit une étiquette unique dès son enregistrement à l'agence.</p>
+                </div>
+              </div>
+
+              <div className={styles.traceabilityFeatureItem}>
+                <div className={styles.featureIconBox}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div>
+                  <h4>Alertes SMS & Email en temps réel</h4>
+                  <p>Soyez immédiatement notifié à chaque étape importante du transport et lors de l'arrivée.</p>
+                </div>
+              </div>
+
+              <div className={styles.traceabilityFeatureItem}>
+                <div className={styles.featureIconBox}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div>
+                  <h4>Garantie de sécurité & RGPD</h4>
+                  <p>Vos données de transport et d'identité sont cryptées et protégées conformément aux normes.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: High-tech 3D Interactive Card */}
+          <div className={`${styles.traceabilityImageWrapper} ${styles.revealRight}`}>
+            <div className={styles.card3d}>
+              <div className={styles.cardInner}>
+                {/* Front: Scanning QR Code UI */}
+                <div className={styles.cardFront}>
+                  <div className={styles.scanLine}></div>
+                  <span className={styles.cardFrontLabel}>SCANNER LE QR CODE</span>
+                  
+                  <svg className={styles.qrCodeSvg} viewBox="0 0 100 100" fill="currentColor">
+                    <path d="M0 0h30v30H0zm10 10h10v10H10zM70 0h30v30H70zm10 10h10v10H80zM0 70h30v30H0zm10 10h10v10H10z" />
+                    <path d="M75 75h10v10H75z" />
+                    <path d="M40 0h5v10h-5zm0 15h10v5H40zm15-15h5v5h-5zm0 10h10v5H55zM35 35h10v5H35zm15 5h5v10h-5zm10-5h5v5h-5zm15 10h5v5h-5zM35 50h5v5h-5zm5 10h10v5H40zm15-5h5v10h-5zm10-10h5v5h-5z" />
+                  </svg>
+
+                  <p className={styles.cardFrontFooter}>Survolez pour voir le statut</p>
+                </div>
+
+                {/* Back: Tracking Timeline Dashboard */}
+                <div className={styles.cardBack}>
+                  <div className={styles.cardBackHeader}>
+                    <span className={styles.trackingBadge}>EN TRANSIT</span>
+                    <span className={styles.trackingId}>#ST-9842-CM</span>
+                  </div>
+
+                  <div className={styles.cardBackCheck}>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                    </svg>
+                  </div>
+
+                  <h3>Colis Sécurisé</h3>
+
+                  <div className={styles.trackingSteps}>
+                    <div className={styles.stepItemActive}>
+                      <span className={styles.stepDot}></span>
+                      <span className={styles.stepText}>1. Colis enregistré à Douala</span>
+                    </div>
+                    <div className={styles.stepItemActive}>
+                      <span className={styles.stepDot}></span>
+                      <span className={styles.stepText}>2. En transit (Axe Lourd)</span>
+                    </div>
+                    <div className={styles.stepItemPending}>
+                      <span className={styles.stepDot}></span>
+                      <span className={styles.stepText}>3. Arrivée prévue à Yaoundé</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Premium Footer */}
+      <footer className={styles.footer}>
+        <div className={`container ${styles.footerGrid}`}>
+          {/* Column 1: Brand details */}
+          <div className={styles.footerBrandCol}>
+            <div className={styles.footerLogoContainer}>
+              <img 
+                src="/images/logo-removebg-preview (2).png" 
+                alt="SafeTrip Logo" 
+                className={styles.footerLogo} 
+              />
+            </div>
+            <p className={styles.footerDesc}>
+              Votre marketplace de confiance pour comparer, réserver vos trajets en bus au Cameroun et suivre vos bagages en temps réel.
+            </p>
+            <div className={styles.socialLinks}>
+              <a href="#social" className={styles.socialIcon}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+                </svg>
+              </a>
+              <a href="#social" className={styles.socialIcon}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path>
+                </svg>
+              </a>
+              <a href="#social" className={styles.socialIcon}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          {/* Column 2: Navigation Links */}
+          <div className={styles.footerLinkCol}>
+            <h4>Services</h4>
+            <ul>
+              <li><Link href="/reserver">Réserver un billet</Link></li>
+              <li><a href="#agences">Agences de transport</a></li>
+              <li><a href="#tracabilite">Suivre un colis</a></li>
+              <li><a href="#qui-sommes-nous">Qui sommes-nous ?</a></li>
+            </ul>
+          </div>
+
+          {/* Column 3: Legal & Security */}
+          <div className={styles.footerLinkCol}>
+            <h4>Sécurité & Légal</h4>
+            <ul>
+              <li><a href="#legal">Mentions Légales</a></li>
+              <li><a href="#privacy">Confidentialité</a></li>
+              <li><a href="#terms">Conditions Générales</a></li>
+              <li><a href="#rgpd">Respect RGPD</a></li>
+            </ul>
+          </div>
+
+          {/* Column 4: Contact details */}
+          <div className={styles.footerLinkCol}>
+            <h4>Contact</h4>
+            <ul className={styles.footerContactList}>
+              <li>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+                <span>support@safetrip.cm</span>
+              </li>
+              <li>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                </svg>
+                <span>+237 677 889 900</span>
+              </li>
+              <li>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <span>Douala & Yaoundé, Cameroun</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Bottom Row */}
+        <div className={styles.footerBottom}>
+          <div className={`container ${styles.footerBottomContent}`}>
+            <p className={styles.copyright}>© 2026 SafeTrip. Tous droits réservés.</p>
+            <p className={styles.footerCredits}>Fait avec 💚 pour la mobilité au Cameroun.</p>
+          </div>
+        </div>
+      </footer>
+
+    </main>
+  );
+}

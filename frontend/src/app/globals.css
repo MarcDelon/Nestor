@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  --primary-navy: #0A2F1D;      /* Deep luxurious Forest Green */
+  --secondary-blue: #00673C;    /* Vibrant Cameroon Emerald Green */
+  --accent-gold: #FBA600;       /* Luminous Cameroon Yellow/Gold */
+  --accent-red: #DC0004;        /* Vibrant Cameroon Crimson Red */
+  --text-gray: #4A5568;         /* Solid text slate gray */
+  --bg-white: #FFFFFF;
+  --bg-light: #F7FAFC;
+  --transition-speed: 0.3s;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Montserrat', 'Poppins', sans-serif;
+  color: var(--text-gray);
+  background-color: var(--bg-white);
+  scroll-behavior: smooth;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--primary-navy);
+}
+
+/* Utilities */
+.btn-primary {
+  background-color: var(--secondary-blue);
+  color: var(--bg-white);
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-speed) ease;
+  display: inline-block;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-navy);
+  transform: translateY(-1px);
+}
+
+.container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
