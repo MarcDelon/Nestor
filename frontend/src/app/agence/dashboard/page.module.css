@@ -2749,3 +2749,395 @@
 .colisStripePending {
   background: #dd6b20;
 }
+
+
+/* Additional Styles for Premium Tabs: Bus & Courier & Chat */
+
+.busGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 15px;
+}
+
+.busCard {
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.busCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  border-color: #cbd5e0;
+}
+
+.busCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.busPlaque {
+  font-family: monospace;
+  background: #edf2f7;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.busClassBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.busClassVIP { background: #fffaf0; color: #b7791f; }
+.busClassConfort { background: #ebf8ff; color: #2b6cb0; }
+.busClassClassique { background: #f7fafc; color: #4a5568; }
+.busClassExecutive { background: #eef8f3; color: #2f855a; }
+
+.busCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.busCapacityLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #718096;
+}
+
+.busCapacityBar {
+  height: 6px;
+  background: #edf2f7;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.busCapacityFill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.busStatusBadge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-radius: 0 0 0 12px;
+  padding: 4px 12px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.busStatusEnRoute { background: #eef8f3; color: #2f855a; }
+.busStatusMaintenance { background: #fff5f5; color: #c53030; }
+.busStatusDisponible { background: #ebf8ff; color: #2b6cb0; }
+
+.busCardFooter {
+  border-top: 1px solid #edf2f7;
+  padding-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.busAmenityList {
+  display: flex;
+  gap: 6px;
+}
+
+.busAmenityIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f7fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  color: #4a5568;
+  border: 1px solid #edf2f7;
+}
+
+.busPlanBtn {
+  background: none;
+  border: 1px solid #00673C;
+  color: #00673C;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.busPlanBtn:hover {
+  background: #00673C;
+  color: #ffffff;
+}
+
+/* Chat Messagerie Styles */
+.chatLayout {
+  display: flex;
+  height: 520px;
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+}
+
+.chatSidebar {
+  width: 280px;
+  border-right: 1px solid #edf2f7;
+  background: #fcfcfc;
+  display: flex;
+  flex-direction: column;
+}
+
+.chatSidebarHeader {
+  padding: 15px 20px;
+  border-bottom: 1px solid #edf2f7;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #1a202c;
+  background: #ffffff;
+}
+
+.contactList {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.contactItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #f7fafc;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.contactItem:hover {
+  background: #f7fafc;
+}
+
+.contactItemActive {
+  background: #eef8f3 !important;
+  border-left: 4px solid #00673C;
+}
+
+.contactAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #00673C;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.contactAvatarOnline::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #48bb78;
+  border: 2px solid #ffffff;
+}
+
+.contactInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.contactHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.contactName {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #2d3748;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contactTime {
+  font-size: 0.7rem;
+  color: #a0aec0;
+}
+
+.contactLastMsg {
+  font-size: 0.75rem;
+  color: #718096;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chatMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.chatMainHeader {
+  padding: 15px 20px;
+  border-bottom: 1px solid #edf2f7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chatActiveName {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #1a202c;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatActiveStatus {
+  font-size: 0.75rem;
+  color: #48bb78;
+  font-weight: 600;
+}
+
+.chatMessages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  background: #f7fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.chatBubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  position: relative;
+}
+
+.chatBubbleRecv {
+  background: #ffffff;
+  color: #2d3748;
+  align-self: flex-start;
+  border-bottom-left-radius: 2px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.chatBubbleSent {
+  background: #00673C;
+  color: #ffffff;
+  align-self: flex-end;
+  border-bottom-right-radius: 2px;
+}
+
+.chatBubbleTime {
+  font-size: 0.65rem;
+  margin-top: 4px;
+  text-align: right;
+  opacity: 0.7;
+}
+
+.chatInputArea {
+  padding: 15px 20px;
+  border-top: 1px solid #edf2f7;
+  display: flex;
+  gap: 10px;
+  background: #ffffff;
+}
+
+.chatInput {
+  flex: 1;
+  background: #f7fafc;
+  border: 1px solid #edf2f7;
+  padding: 10px 16px;
+  border-radius: 24px;
+  font-size: 0.85rem;
+  outline: none;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.chatInput:focus {
+  border-color: #00673C;
+  background: #ffffff;
+}
+
+.chatSendBtn {
+  background: #00673C;
+  color: #ffffff;
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.chatSendBtn:hover {
+  background: #0A2F1D;
+  transform: scale(1.05);
+}
+
+/* Profiles customization */
+.profileGrid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 30px;
+}
+
+.profileSidebar {
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
+}
+
+.profileFormMain {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
