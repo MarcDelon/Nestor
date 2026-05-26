@@ -164,6 +164,10 @@ export default function ClientDashboard() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [clientActiveTab, setClientActiveTab] = useState("dashboard");
+  // Active Billets and Colis Database states
+  const [billetsState, setBilletsState] = useState<Billet[]>([]);
+  const [colisState, setColisState] = useState<Colis[]>([]);
+
   const [selectedBillet, setSelectedBillet] = useState<Billet | null>(null);
   const [selectedColis, setSelectedColis] = useState<Colis | null>(null);
   const digitalTicketRef = useRef<HTMLDivElement>(null);
@@ -212,6 +216,45 @@ export default function ClientDashboard() {
         setProfileFullName(storedEmail.split("@")[0]);
       }
     }
+
+    // Hydrate tickets and package tracking from API (isolated fetches)
+    const hydrateClientData = async () => {
+      const clientId = localStorage.getItem("safetrip_user_id") || "client-uuid-1";
+
+      // 1. Fetch billets (isolated — failure here does not affect colis)
+      try {
+        const billetsRes = await fetch(`http://localhost:5000/api/client/billets?client_id=${clientId}`);
+        if (billetsRes.ok) {
+          const data = await billetsRes.json();
+          // Even if data is [], it means the account has no bookings yet — this is correct DB state
+          setBilletsState(data);
+        } else {
+          console.warn("⚠️ API billets a renvoyé une erreur.");
+          setBilletsState([]);
+        }
+      } catch (err) {
+        console.warn("⚠️ API billets non joignable.", err);
+        setBilletsState([]);
+      }
+
+      // 2. Fetch colis (isolated — failure here does not affect billets)
+      try {
+        const colisRes = await fetch(`http://localhost:5000/api/client/colis?client_id=${clientId}`);
+        if (colisRes.ok) {
+          const data = await colisRes.json();
+          // Even if data is [], it means no packages registered yet — correct DB state
+          setColisState(data);
+        } else {
+          console.warn("⚠️ API colis a renvoyé une erreur.");
+          setColisState([]);
+        }
+      } catch (err) {
+        console.warn("⚠️ API colis non joignable.", err);
+        setColisState([]);
+      }
+    };
+
+    hydrateClientData();
   }, []);
 
   const showToast = (message: string, isSuccess = true) => {
@@ -510,6 +553,30 @@ export default function ClientDashboard() {
     setProfileEditing(false);
   };
 
+  // Calcul dynamique des statistiques depuis la base de données
+  const activeTickets = billetsState.filter(b => b.status === "Actif");
+  const activeTicketsCount = activeTickets.length;
+  
+  // Trouver le prochain voyage prévu
+  const nextTrip = activeTickets[0];
+  const nextTripText = nextTrip ? `Le ${nextTrip.date} · ${nextTrip.depTime}` : "Aucun voyage prévu";
+
+  // Points de fidélité basés sur les voyages complétés
+  const completedTickets = billetsState.filter(b => b.status === "Complété");
+  const completedCount = completedTickets.length;
+  const loyaltyPoints = completedCount * 50; // 50 points par voyage complété
+  const loyaltyStatus = loyaltyPoints < 100 ? "Statut Bronze" : loyaltyPoints < 300 ? "Statut Argent" : "Statut Or";
+
+  // Bagages et colis
+  const totalColisCount = colisState.length;
+  const transitColisCount = colisState.filter(c => c.status !== "Livré" && c.status !== "En attente de scan").length;
+  const colisSubtext = totalColisCount > 0 ? `${transitColisCount} bagage(s) en transit` : "Aucun bagage enregistré";
+
+  // Total dépensé sur les billets valides (non annulés)
+  const totalSpent = billetsState
+    .filter(b => b.status !== "Annulé")
+    .reduce((sum, b) => sum + (b.price || 0), 0);
+
   return (
     <div className={styles.clientDashboardLayout}>
       {toastMessage && (
@@ -643,8 +710,8 @@ export default function ClientDashboard() {
                 </div>
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Voyages Programmés</span>
-                  <span className={styles.statValue}>1 Actif</span>
-                  <span className={styles.statTrend} style={{ color: "#2f855a" }}>Départ le 25 Mai 2026</span>
+                  <span className={styles.statValue}>{activeTicketsCount} Actif{activeTicketsCount !== 1 ? "s" : ""}</span>
+                  <span className={styles.statTrend} style={{ color: "#2f855a" }}>{nextTripText}</span>
                 </div>
               </div>
 
@@ -656,8 +723,8 @@ export default function ClientDashboard() {
                 </div>
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Points Fidélité</span>
-                  <span className={styles.statValue}>350 pts</span>
-                  <span className={styles.statTrend} style={{ color: "#744210" }}>Statut Bronze</span>
+                  <span className={styles.statValue}>{loyaltyPoints} pts</span>
+                  <span className={styles.statTrend} style={{ color: "#744210" }}>{loyaltyStatus}</span>
                 </div>
               </div>
 
@@ -670,8 +737,8 @@ export default function ClientDashboard() {
                 </div>
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Bagages Enregistrés</span>
-                  <span className={styles.statValue}>2 étiquetés</span>
-                  <span className={styles.statTrend} style={{ color: "#3182ce" }}>Scannés par l'agence</span>
+                  <span className={styles.statValue}>{totalColisCount} étiqueté{totalColisCount !== 1 ? "s" : ""}</span>
+                  <span className={styles.statTrend} style={{ color: "#3182ce" }}>{colisSubtext}</span>
                 </div>
               </div>
 
@@ -684,8 +751,8 @@ export default function ClientDashboard() {
                 </div>
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Total Dépensé</span>
-                  <span className={styles.statValue}>9 000 FCFA</span>
-                  <span className={styles.statTrend} style={{ color: "#9b2c2c" }}>3 réservations complétées</span>
+                  <span className={styles.statValue}>{totalSpent.toLocaleString("fr-CM")} FCFA</span>
+                  <span className={styles.statTrend} style={{ color: "#9b2c2c" }}>{completedCount} réservation{completedCount !== 1 ? "s" : ""} complétée{completedCount !== 1 ? "s" : ""}</span>
                 </div>
               </div>
             </div>
@@ -700,12 +767,12 @@ export default function ClientDashboard() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"18px",height:"18px",color:"#00673C"}}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
                   Mes Billets de Voyage
                 </h2>
-                <p className={styles.billetPageSub}>{MOCK_BILLETS.length} billet{MOCK_BILLETS.length > 1 ? "s" : ""} trouvé{MOCK_BILLETS.length > 1 ? "s" : ""}</p>
+                <p className={styles.billetPageSub}>{billetsState.length} billet{billetsState.length > 1 ? "s" : ""} trouvé{billetsState.length > 1 ? "s" : ""}</p>
               </div>
             </div>
 
             <div className={styles.billetList}>
-              {MOCK_BILLETS.map((billet) => (
+              {billetsState.map((billet) => (
                 <div key={billet.id} className={styles.billetCard}>
                   <div className={`${styles.billetStripe} ${billet.status === "Actif" ? styles.billetStripeActive : billet.status === "Annulé" ? styles.billetStripeCancelled : styles.billetStripeCompleted}`} />
                   
@@ -906,12 +973,12 @@ export default function ClientDashboard() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"18px",height:"18px",color:"#00673C"}}><rect x="3" y="6" width="18" height="14" rx="2" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                   Suivi de mes Colis &amp; Bagages
                 </h2>
-                <p className={styles.billetPageSub}>{MOCK_COLIS.length} article{MOCK_COLIS.length > 1 ? "s" : ""} enregistré{MOCK_COLIS.length > 1 ? "s" : ""}</p>
+                <p className={styles.billetPageSub}>{colisState.length} article{colisState.length > 1 ? "s" : ""} enregistré{colisState.length > 1 ? "s" : ""}</p>
               </div>
             </div>
 
             <div className={styles.billetList}>
-              {MOCK_COLIS.map((colis) => {
+              {colisState.map((colis) => {
                 const isActive = colis.status === "À bord du bus" || colis.status === "En transit" || colis.status === "Scanné en gare";
                 const isDelivered = colis.status === "Livré";
                 const isPending = colis.status === "En attente de scan";

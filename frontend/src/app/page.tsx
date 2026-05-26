@@ -87,25 +87,29 @@ export default function Home() {
       try {
         const liveData = await Promise.all(
           citiesWeather.map(async (c) => {
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&timezone=auto`;
-            const res = await fetch(url);
-            if (!res.ok) return c;
-            const data = await res.json();
-            if (data && data.current) {
-              const liveTemp = Math.round(data.current.temperature_2m);
-              const code = data.current.weather_code;
-              
-              // WMO Weather interpretation codes
-              let desc = "Doux 🌤️";
-              if (code === 0) desc = "Ensoleillé ☀️";
-              else if (code >= 1 && code <= 3) desc = "Nuageux ☁️";
-              else if (code === 45 || code === 48) desc = "Brumeux 🌫️";
-              else if (code >= 51 && code <= 65) desc = "Pluvieux 🌧️";
-              else if (code >= 80 && code <= 82) desc = "Averses 🌧️";
-              else if (code >= 95) desc = "Orageux ⛈️";
-              else desc = "Couvert ☁️";
+            try {
+              const url = `https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,weather_code&timezone=auto`;
+              const res = await fetch(url);
+              if (!res.ok) return c;
+              const data = await res.json();
+              if (data && data.current) {
+                const liveTemp = Math.round(data.current.temperature_2m);
+                const code = data.current.weather_code;
+                
+                // WMO Weather interpretation codes
+                let desc = "Doux 🌤️";
+                if (code === 0) desc = "Ensoleillé ☀️";
+                else if (code >= 1 && code <= 3) desc = "Nuageux ☁️";
+                else if (code === 45 || code === 48) desc = "Brumeux 🌫️";
+                else if (code >= 51 && code <= 65) desc = "Pluvieux 🌧️";
+                else if (code >= 80 && code <= 82) desc = "Averses 🌧️";
+                else if (code >= 95) desc = "Orageux ⛈️";
+                else desc = "Couvert ☁️";
 
-              return { ...c, temp: `${liveTemp}°`, desc };
+                return { ...c, temp: `${liveTemp}°`, desc };
+              }
+            } catch (cityErr) {
+              console.warn(`Impossible de récupérer la météo en temps réel pour ${c.city} (utilisation des valeurs par défaut).`);
             }
             return c;
           })

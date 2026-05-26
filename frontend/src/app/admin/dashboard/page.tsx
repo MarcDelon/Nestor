@@ -5,24 +5,51 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-interface PartnerAgency {
-  name: string;
-  logo: string;
-  cert: string;
+const API_BASE = "http://localhost:5000/api/agency";
+
+interface DBError extends Error {
+  message: string;
 }
 
-const PARTNER_AGENCIES: PartnerAgency[] = [
-  { name: "Finexs Voyage", logo: "/images/finexs.png", cert: "Partenaire Platine" },
-  { name: "Buca Voyage", logo: "/images/bucavoyage.png", cert: "Partenaire Or" },
-  { name: "General Express", logo: "/images/General.png", cert: "Partenaire Certifié" },
-  { name: "Touristique Express", logo: "/images/Touristique.png", cert: "Partenaire National" },
-  { name: "Men Travel", logo: "/images/mentravel.png", cert: "Partenaire Premium" }
-];
+interface Agency {
+  id: number;
+  name: string;
+  logo: string;
+  certification: string;
+}
+
+interface Bus {
+  id: string;
+  agency_id: number;
+  capacity: number;
+  occupied: number;
+  status: string;
+}
+
+interface Journey {
+  id: number;
+  agency_id: number;
+  price: number;
+}
+
+interface Passenger {
+  id: number;
+  journey_id: number;
+  status: string;
+  luggage_count: number;
+  luggage_scanned: boolean;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isMounted, setIsMounted] = useState(false);
+
+  // Dynamic state loaded from DB
+  const [agencies, setAgencies] = useState<Agency[]>([]);
+  const [buses, setBuses] = useState<Bus[]>([]);
+  const [journeys, setJourneys] = useState<Journey[]>([]);
+  const [passengersMap, setPassengersMap] = useState<{ [journeyId: number]: Passenger[] }>({});
 
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("safetrip_logged_in") === "true";
@@ -35,8 +62,62 @@ export default function AdminDashboard() {
 
     const storedEmail = localStorage.getItem("safetrip_user_email") || "";
     setEmail(storedEmail);
-    setIsMounted(true);
-  }, []);
+
+    const fetchData = async () => {
+      try {
+        // 1. Fetch Agencies
+        const agenciesRes = await fetch(`${API_BASE}/agencies`);
+        let agenciesData: Agency[] = [];
+        if (agenciesRes.ok) {
+          agenciesData = await agenciesRes.json();
+          setAgencies(agenciesData);
+        }
+
+        // 2. Fetch Buses
+        const busesRes = await fetch(`${API_BASE}/buses`);
+        let busesData: Bus[] = [];
+        if (busesRes.ok) {
+          busesData = await busesRes.json();
+          setBuses(busesData);
+        }
+
+        // 3. Fetch Journeys
+        const journeysRes = await fetch(`${API_BASE}/journeys/all`);
+        let journeysData: Journey[] = [];
+        if (journeysRes.ok) {
+          const raw = await journeysRes.json();
+          journeysData = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.value) ? raw.value : []);
+          setJourneys(journeysData);
+        }
+
+        // 4. Fetch Passengers for each journey to compute sales & scan rates
+        if (journeysData.length > 0) {
+          const tempMap: { [journeyId: number]: Passenger[] } = {};
+          await Promise.all(
+            journeysData.map(async (j) => {
+              try {
+                const pRes = await fetch(`${API_BASE}/passengers/${j.id}`);
+                if (pRes.ok) {
+                  tempMap[j.id] = await pRes.json();
+                }
+              } catch (e) {
+                console.error("Error fetching passengers for journey " + j.id, e);
+              }
+            })
+          );
+          setPassengersMap(tempMap);
+        }
+
+        setIsMounted(true);
+      } catch (err: unknown) {
+        const error = err as DBError;
+        console.error("⚠️ Error hydrating Admin Dashboard:", error.message);
+        setIsMounted(true);
+      }
+    };
+
+    fetchData();
+  }, [router]);
 
   const handleLogout = () => {
     localStorage.setItem("safetrip_logged_in", "false");
@@ -91,6 +172,26 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  // Calculate Global KPIs dynamically
+  const totalSales = journeys.reduce((sum, j) => {
+    const passengersList = passengersMap[j.id] || [];
+    return sum + (j.price * passengersList.length);
+  }, 0);
+
+  const totalPassengers = journeys.reduce((sum, j) => {
+    return sum + (passengersMap[j.id]?.length || 0);
+  }, 0);
+
+  // Checked-in / Registered compliance rate
+  const totalCheckedIn = journeys.reduce((sum, j) => {
+    const list = passengersMap[j.id] || [];
+    return sum + list.filter(p => p.status === "Enregistré").length;
+  }, 0);
+
+  const qrCompliance = totalPassengers > 0
+    ? (totalCheckedIn / totalPassengers) * 100
+    : 100.0;
 
   return (
     <div className={styles.clientDashboardLayout}>
@@ -167,8 +268,8 @@ export default function AdminDashboard() {
               </div>
               <div className={styles.statValueContainer}>
                 <span className={styles.statLabel}>Chiffre d&apos;Affaires Global</span>
-                <span className={styles.statValue}>15 420 000 FCFA</span>
-                <span className={styles.statTrend} style={{ color: "#2f855a" }}>▲ +18.4% ce mois</span>
+                <span className={styles.statValue}>{totalSales.toLocaleString()} FCFA</span>
+                <span className={styles.statTrend} style={{ color: "#2f855a" }}>● {totalPassengers} billet{totalPassengers !== 1 ? "s" : ""} vendu{totalPassengers !== 1 ? "s" : ""}</span>
               </div>
             </div>
 
@@ -183,7 +284,7 @@ export default function AdminDashboard() {
               </div>
               <div className={styles.statValueContainer}>
                 <span className={styles.statLabel}>Agences Partenaires</span>
-                <span className={styles.statValue}>5 Compagnies</span>
+                <span className={styles.statValue}>{agencies.length} Compagnies</span>
                 <span className={styles.statTrend} style={{ color: "#718096" }}>Toutes certifiées SafeTrip</span>
               </div>
             </div>
@@ -196,7 +297,7 @@ export default function AdminDashboard() {
               </div>
               <div className={styles.statValueContainer}>
                 <span className={styles.statLabel}>Trajets Actifs</span>
-                <span className={styles.statValue}>42 Horaires</span>
+                <span className={styles.statValue}>{journeys.length} Horaires</span>
                 <span className={styles.statTrend} style={{ color: "#3182ce" }}>Lignes Nationales</span>
               </div>
             </div>
@@ -210,7 +311,7 @@ export default function AdminDashboard() {
               </div>
               <div className={styles.statValueContainer}>
                 <span className={styles.statLabel}>Enregistrements QR</span>
-                <span className={styles.statValue}>92.4%</span>
+                <span className={styles.statValue}>{qrCompliance.toFixed(1)}%</span>
                 <span className={styles.statTrend} style={{ color: "#2f855a" }}>Conformité optimale 🇨🇲</span>
               </div>
             </div>
@@ -228,40 +329,56 @@ export default function AdminDashboard() {
                     <tr>
                       <th>Compagnie</th>
                       <th>Certificat</th>
-                      <th>Chiffre d&apos;Affaires</th>
+                      <th>Bus Actifs</th>
                       <th>Taux de Remplissage</th>
                       <th>Statut Ligne</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {PARTNER_AGENCIES.map((agency, i) => (
-                      <tr key={agency.name}>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#f7fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: "5px", border: "1px solid #edf2f7" }}>
-                              <img src={agency.logo} alt={agency.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                    {agencies.map((agency) => {
+                      // Filter buses for this agency
+                      const agencyBuses = buses.filter(b => b.agency_id === agency.id);
+                      const activeBusesCount = agencyBuses.filter(b => b.status !== "En maintenance").length;
+
+                      // Compute average occupancy rate for this agency's buses
+                      const totalOccupied = agencyBuses.reduce((sum, b) => sum + b.occupied, 0);
+                      const totalCapacity = agencyBuses.reduce((sum, b) => sum + b.capacity, 0);
+                      const occupancyRate = totalCapacity > 0
+                        ? Math.round((totalOccupied / totalCapacity) * 100)
+                        : 0;
+
+                      // Ligne Active if there is at least one journey
+                      const hasJourneys = journeys.some(j => j.agency_id === agency.id);
+
+                      return (
+                        <tr key={agency.id}>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "#f7fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: "5px", border: "1px solid #edf2f7" }}>
+                                <img src={agency.logo} alt={agency.name} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                              </div>
+                              <strong>{agency.name}</strong>
                             </div>
-                            <strong>{agency.name}</strong>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={styles.agencyBadge} style={{ background: "#fffaf0", color: "#b7791f", border: "none" }}>
-                            {agency.cert}
-                          </span>
-                        </td>
-                        <td>
-                          <strong>{(2800000 + i * 450000).toLocaleString()} FCFA</strong>
-                        </td>
-                        <td>
-                          <strong>{82 + i * 2}%</strong>
-                        </td>
-                        <td>
-                          <span className={`${styles.statusPill} ${styles.statusChecked}`}>
-                            Actif
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            <span className={styles.agencyBadge} style={{ background: "#fffaf0", color: "#b7791f", border: "none" }}>
+                              {agency.certification}
+                            </span>
+                          </td>
+                          <td>
+                            <strong>{activeBusesCount} / {agencyBuses.length} bus actifs</strong>
+                          </td>
+                          <td>
+                            <strong>{occupancyRate}%</strong>
+                          </td>
+                          <td>
+                            <span className={`${styles.statusPill} ${hasJourneys ? styles.statusChecked : styles.statusPending}`}>
+                              {hasJourneys ? "Actif" : "Inactif"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

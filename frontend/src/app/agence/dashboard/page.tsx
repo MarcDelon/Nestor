@@ -5,6 +5,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+const API_BASE = "http://localhost:5000/api/agency";
+
 interface Journey {
   id: number;
   type: "bus";
@@ -34,6 +36,7 @@ interface Passenger {
 
 interface Bus {
   id: string;
+  agencyId: number;
   plaque: string;
   busClass: "VIP" | "Confort" | "Classique" | "Executive Class";
   capacity: number;
@@ -44,6 +47,7 @@ interface Bus {
 
 interface Colis {
   id: string;
+  agencyId: number;
   label: string;
   type: "Valise" | "Sac" | "Carton" | "Sac à dos" | "Colis";
   weight: number;
@@ -94,21 +98,7 @@ export default function AgencyDashboard() {
 
   // Interactive Messenger States
   const [activeContactId, setActiveContactId] = useState("support");
-  const [chatThreads, setChatThreads] = useState<{ [contactId: string]: ChatMessage[] }>({
-    support: [
-      { id: 1, sender: "contact", text: "Bonjour, l'équipe d'assistance SafeTrip est disponible. Comment pouvons-nous vous aider aujourd'hui ?", time: "09:15" },
-      { id: 2, sender: "agency", text: "Bonjour, nous aimerions certifier une nouvelle ligne de bus Douala-Kribi.", time: "09:30" },
-      { id: 3, sender: "contact", text: "Parfait ! Veuillez nous transmettre la plaque d'immatriculation et l'agrément ministériel du bus dans l'onglet Profil.", time: "09:32" }
-    ],
-    marc: [
-      { id: 1, sender: "contact", text: "Bonjour Finexs, mon colis de référence BAG-2026-FX58-A est bien enregistré à bord ?", time: "11:05" },
-      { id: 2, sender: "agency", text: "Bonjour Marc, oui ! Votre sac de voyage noir de 15 kg a été scanné avec succès et est à bord.", time: "11:20" }
-    ],
-    syntyche: [
-      { id: 1, sender: "contact", text: "Merci pour le voyage VIP de ce matin, le bus était très confortable et le Wi-Fi super rapide !", time: "12:00" },
-      { id: 2, sender: "agency", text: "Merci Syntyche ! Nous mettons tout en oeuvre pour vous offrir le meilleur service possible. Bon séjour !", time: "12:15" }
-    ]
-  });
+  const [chatThreads, setChatThreads] = useState<{ [contactId: string]: ChatMessage[] }>({});
   const [chatInputText, setChatInputText] = useState("");
 
   // Simulated Custom Agency Profile fields
@@ -132,7 +122,7 @@ export default function AgencyDashboard() {
   const [scanningPassenger, setScanningPassenger] = useState<Passenger | null>(null);
   const [activeScanJourneyId, setActiveScanJourneyId] = useState<number | null>(null);
 
-  // Security Check & initial DB hydration
+  // Security Check & initial DB hydration from API
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("safetrip_logged_in") === "true";
     const role = localStorage.getItem("safetrip_user_role");
@@ -145,184 +135,171 @@ export default function AgencyDashboard() {
     const storedEmail = localStorage.getItem("safetrip_user_email") || "";
     setEmail(storedEmail);
 
-    const storedAgency = localStorage.getItem("safetrip_active_agency");
-    if (storedAgency) {
-      setSelectedAgencyName(storedAgency);
+    let currentAgency = localStorage.getItem("safetrip_active_agency");
+    if (!currentAgency && storedEmail) {
+      const lowerEmail = storedEmail.toLowerCase();
+      if (lowerEmail.includes("buca")) {
+        currentAgency = "Buca Voyage";
+      } else if (lowerEmail.includes("general")) {
+        currentAgency = "General Express";
+      } else if (lowerEmail.includes("touristique")) {
+        currentAgency = "Touristique Express";
+      } else if (lowerEmail.includes("men")) {
+        currentAgency = "Men Travel";
+      } else {
+        currentAgency = "Finexs Voyage";
+      }
+      localStorage.setItem("safetrip_active_agency", currentAgency);
+    }
+
+    if (currentAgency) {
+      setSelectedAgencyName(currentAgency);
     } else {
+      setSelectedAgencyName("Finexs Voyage");
       localStorage.setItem("safetrip_active_agency", "Finexs Voyage");
     }
 
-    // Hydrate journeys
-    const saved = localStorage.getItem("safetrip_journeys");
-    let initialJourneys: Journey[] = [];
-    if (saved) {
-      initialJourneys = JSON.parse(saved);
-      setJourneysState(initialJourneys);
-    } else {
-      initialJourneys = [
-        {
-          id: 1,
-          type: "bus",
-          operator: "Finexs Voyage VIP",
-          logo: "/images/finexs.png",
-          depTime: "06:15",
-          arrTime: "10:30",
-          duration: "4h15",
-          depStation: "Douala - Agence Finexs Douala",
-          arrStation: "Yaoundé - Agence Finexs Mvan",
-          price: 6000,
-          amenities: ["USB", "AC", "Sièges VIP"],
-          amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "toilet"]
-        },
-        {
-          id: 2,
-          type: "bus",
-          operator: "Finexs Voyage VIP",
-          logo: "/images/finexs.png",
-          depTime: "08:00",
-          arrTime: "12:15",
-          duration: "4h15",
-          depStation: "Douala - Agence Finexs Douala",
-          arrStation: "Yaoundé - Agence Finexs Mvan",
-          price: 4000,
-          amenities: ["USB", "AC", "Sièges VIP"],
-          amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet"]
-        },
-        {
-          id: 3,
-          type: "bus",
-          operator: "Buca Voyage Confort",
-          logo: "/images/bucavoyage.png",
-          depTime: "10:30",
-          arrTime: "14:45",
-          duration: "4h15",
-          depStation: "Douala - Agence Buca Bessengue",
-          arrStation: "Yaoundé - Agence Buca Mvan",
-          price: 6000,
-          amenities: ["Prises", "Sièges VIP"],
-          amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "smoking"],
-          warning: "Bientôt complet"
-        },
-        {
-          id: 4,
-          type: "bus",
-          operator: "General Express Confort",
-          logo: "/images/General.png",
-          depTime: "13:00",
-          arrTime: "17:15",
-          duration: "4h15",
-          depStation: "Douala - Bessengue",
-          arrStation: "Yaoundé - Mvan",
-          price: 5000,
-          amenities: ["AC", "Prises"],
-          amenityKeys: ["ac", "ebillet", "pets", "instant"]
-        },
-        {
-          id: 5,
-          type: "bus",
-          operator: "Touristique Express VIP",
-          logo: "/images/Touristique.png",
-          depTime: "15:00",
-          arrTime: "19:15",
-          duration: "4h15",
-          depStation: "Douala - Agence Touristique Akwa",
-          arrStation: "Yaoundé - Agence Touristique Mvan",
-          price: 5000,
-          amenities: ["AC", "Prises", "Sièges VIP"],
-          amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "toilet"]
-        },
-        {
-          id: 6,
-          type: "bus",
-          operator: "Men Travel Executive Class",
-          logo: "/images/mentravel.png",
-          depTime: "16:30",
-          arrTime: "20:45",
-          duration: "4h15",
-          depStation: "Douala - Carrefour Akwa",
-          arrStation: "Yaoundé - Mvan",
-          price: 8000,
-          amenities: ["Wi-Fi", "AC", "Restauration", "Prises", "Boisson offerte"],
-          amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "toilet", "wifi", "catering", "pmr"]
-        },
-        {
-          id: 7,
-          type: "bus",
-          operator: "Finexs Voyage Classique",
-          logo: "/images/finexs.png",
-          depTime: "18:30",
-          arrTime: "22:45",
-          duration: "4h15",
-          depStation: "Douala - Agence Finexs Douala",
-          arrStation: "Yaoundé - Agence Finexs Mvan",
-          price: 3000,
-          amenities: ["AC"],
-          amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet"]
-        },
-        {
-          id: 8,
-          type: "bus",
-          operator: "Buca Voyage Classique",
-          logo: "/images/bucavoyage.png",
-          depTime: "19:00",
-          arrTime: "23:15",
-          duration: "4h15",
-          depStation: "Douala - Bessengue",
-          arrStation: "Yaoundé - Mvan",
-          price: 3000,
-          amenities: ["AC"],
-          amenityKeys: ["smoking", "reclining", "plug"],
-          isNight: true
-        }
-      ];
-      localStorage.setItem("safetrip_journeys", JSON.stringify(initialJourneys));
-      setJourneysState(initialJourneys);
-    }
+    // Helper to map DB row to frontend Journey interface
+    const mapDbJourney = (j: any): Journey => ({
+      id: j.id,
+      type: "bus",
+      operator: j.operator,
+      logo: j.logo,
+      depTime: j.dep_time,
+      arrTime: j.arr_time,
+      duration: j.duration,
+      depStation: j.dep_station,
+      arrStation: j.arr_station,
+      price: j.price,
+      amenities: j.amenities || [],
+      amenityKeys: j.amenity_keys || [],
+      warning: j.warning || undefined,
+      isNight: j.is_night || false
+    });
 
-    // Hydrate bus fleet
-    const savedBuses = localStorage.getItem("safetrip_buses");
-    if (savedBuses) {
-      setBusesState(JSON.parse(savedBuses));
-    } else {
-      const defaultBuses: Bus[] = [
-        { id: "BUS-01", plaque: "LT-8812-G", busClass: "VIP", capacity: 30, occupied: 24, status: "Disponible", amenities: ["wifi", "ac", "toilet", "plug"] },
-        { id: "BUS-02", plaque: "LT-4491-A", busClass: "Confort", capacity: 50, occupied: 42, status: "En route", amenities: ["ac", "plug"] },
-        { id: "BUS-03", plaque: "LT-1102-K", busClass: "Classique", capacity: 70, occupied: 0, status: "En maintenance", amenities: ["ac"] },
-        { id: "BUS-04", plaque: "LT-9921-X", busClass: "Executive Class", capacity: 24, occupied: 20, status: "Disponible", amenities: ["wifi", "ac", "toilet", "catering", "plug"] }
-      ];
-      localStorage.setItem("safetrip_buses", JSON.stringify(defaultBuses));
-      setBusesState(defaultBuses);
-    }
+    // Helper to map DB row to frontend Bus interface
+    const mapDbBus = (b: any): Bus => {
+      const amenities = [...(b.amenities || [])];
+      if (b.has_wifi && !amenities.includes("wifi")) amenities.push("wifi");
+      if (b.has_ac && !amenities.includes("ac")) amenities.push("ac");
+      if (b.has_toilet && !amenities.includes("toilet")) amenities.push("toilet");
+      if (b.has_catering && !amenities.includes("catering")) amenities.push("catering");
+      
+      return {
+        id: b.id,
+        agencyId: b.agency_id || 1,
+        plaque: b.plaque,
+        busClass: b.bus_class,
+        capacity: b.capacity,
+        occupied: b.occupied,
+        status: b.status,
+        amenities
+      };
+    };
 
-    // Hydrate colis
-    const savedColis = localStorage.getItem("safetrip_colis_db");
-    if (savedColis) {
-      setColisState(JSON.parse(savedColis));
-    } else {
-      const defaultColis: Colis[] = [
-        { id: "BAG-2026-FX58-A", label: "Sac de Voyage principal", type: "Sac", weight: 15, color: "Noir", status: "À bord du bus", trip: "Douala → Yaoundé", tripDate: "25 Mai 2026 · 06:15", agency: "Finexs Voyage", qrRef: "QR-FX58-A", fragile: false },
-        { id: "BAG-2026-FX58-B", label: "Carton scellé (Alimentation)", type: "Carton", weight: 8, color: "Brun", status: "Scanné en gare", trip: "Douala → Yaoundé", tripDate: "25 Mai 2026 · 06:15", agency: "Finexs Voyage", qrRef: "QR-FX58-B", fragile: true },
-        { id: "BAG-2026-BV33-A", label: "Valise cabine", type: "Valise", weight: 12, color: "Bordeaux", status: "Livré", trip: "Yaoundé → Bafoussam", tripDate: "18 Avril 2026 · 08:00", agency: "Buca Voyage", qrRef: "QR-BV33-A", fragile: false },
-        { id: "BAG-2026-GE21-A", label: "Sac à dos randonnée", type: "Sac à dos", weight: 5, color: "Bleu", status: "En attente de scan", trip: "Douala → Yaoundé", tripDate: "25 Mai 2026 · 18:30", agency: "General Express", qrRef: "QR-GE21-A", fragile: false }
-      ];
-      localStorage.setItem("safetrip_colis_db", JSON.stringify(defaultColis));
-      setColisState(defaultColis);
-    }
+    // Helper to map DB row to frontend Colis interface
+    const mapDbColis = (c: any): Colis => ({
+      id: c.id,
+      agencyId: c.agency_id || 1,
+      label: c.label,
+      type: c.type,
+      weight: c.weight,
+      color: c.color,
+      status: c.status,
+      trip: c.trip,
+      tripDate: c.trip_date,
+      agency: c.agency || "",
+      qrRef: c.qr_ref,
+      fragile: c.fragile
+    });
 
-    // Hydrate profile custom settings
-    const savedProfile = localStorage.getItem("safetrip_agency_profile_custom");
-    if (savedProfile) {
+    // Hydrate ALL data from backend API with localStorage fallback
+    const hydrateFromApi = async () => {
+      const storedAgencyIdStr = localStorage.getItem("safetrip_agency_id") || "1";
+      const storedAgencyId = parseInt(storedAgencyIdStr, 10) || 1;
+
+      // 1. Fetch ALL journeys (not filtered — we filter client-side)
       try {
-        const p = JSON.parse(savedProfile);
-        if (p.email) setProfileEmail(p.email);
-        if (p.phone) setProfilePhone(p.phone);
-        if (p.address) setProfileAddress(p.address);
-        if (p.description) setProfileDescription(p.description);
-      } catch { /* ignore */ }
-    }
+        const journeysRes = await fetch(`${API_BASE}/journeys/all`);
+        if (journeysRes.ok) {
+          const rawJourneys = await journeysRes.json();
+          const journeysArr = Array.isArray(rawJourneys) ? rawJourneys : (rawJourneys && Array.isArray(rawJourneys.value) ? rawJourneys.value : []);
+          const mapped = journeysArr.map(mapDbJourney);
+          setJourneysState(mapped);
+        } else { throw new Error("journeys API failed"); }
+      } catch (err) {
+        console.warn("⚠️ API trajets non joignable.", err);
+        setJourneysState([]);
+      }
 
-    setIsMounted(true);
+      // 2. Fetch buses
+      try {
+        const busesRes = await fetch(`${API_BASE}/buses`);
+        if (busesRes.ok) {
+          const rawBuses = await busesRes.json();
+          const busesArr = Array.isArray(rawBuses) ? rawBuses : (rawBuses && Array.isArray(rawBuses.value) ? rawBuses.value : []);
+          setBusesState(busesArr.map(mapDbBus));
+        }
+      } catch (err) {
+        console.warn("⚠️ API bus non joignable.", err);
+        setBusesState([]);
+      }
+
+      // 3. Fetch colis
+      try {
+        const colisRes = await fetch(`${API_BASE}/colis`);
+        if (colisRes.ok) {
+          const rawColis = await colisRes.json();
+          const colisArr = Array.isArray(rawColis) ? rawColis : (rawColis && Array.isArray(rawColis.value) ? rawColis.value : []);
+          setColisState(colisArr.map(mapDbColis));
+        }
+      } catch (err) {
+        console.warn("⚠️ API colis non joignable.", err);
+        setColisState([]);
+      }
+
+      // 4. Fetch all messages
+      try {
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${storedAgencyId}`);
+        if (msgRes.ok) {
+          const rawThreads = await msgRes.json();
+          const mapped: { [contactId: string]: ChatMessage[] } = {};
+          Object.keys(rawThreads).forEach(threadId => {
+            mapped[threadId] = rawThreads[threadId].map((m: any) => ({
+              id: m.id,
+              sender: m.sender as "agency" | "contact",
+              text: m.text,
+              time: m.time
+            }));
+          });
+          setChatThreads(mapped);
+        }
+      } catch (err) {
+        console.warn("⚠️ API messages non joignable.", err);
+      }
+
+      // 5. Fetch agency profile
+      try {
+        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${storedAgencyId}`);
+        if (profileRes.ok) {
+          const p = await profileRes.json();
+          if (p.email) setProfileEmail(p.email);
+          if (p.phone) setProfilePhone(p.phone);
+          if (p.address) setProfileAddress(p.address);
+          if (p.description) setProfileDescription(p.description);
+        }
+      } catch (err) {
+        console.warn("⚠️ API profil non joignable.", err);
+      }
+
+      setIsMounted(true);
+    };
+
+    hydrateFromApi();
   }, []);
+
+  // Helper to resolve the active agency ID
+  const currentAgencyId = PARTNER_AGENCIES.findIndex(a => a.name === selectedAgencyName) + 1;
 
   // Filter journeys list to only display operations of the selected agency
   const agencyJourneys = journeysState.filter(j => 
@@ -331,49 +308,98 @@ export default function AgencyDashboard() {
 
   // Filter colis list to only display operations of the selected agency
   const agencyColis = colisState.filter(c => 
-    c.agency.toLowerCase().includes(selectedAgencyName.split(" ")[0].toLowerCase())
+    c.agencyId === currentAgencyId || c.agency.toLowerCase().includes(selectedAgencyName.split(" ")[0].toLowerCase())
   );
 
-  // Generate simulated passenger lists for each trip
+  // Fetch passenger lists from API for each journey
   useEffect(() => {
     if (journeysState.length === 0) return;
-    
-    const passengerTemplates = [
-      { name: "Marc Ndip", phone: "+237 699 01 22 33", seat: "1A (VIP)", status: "Enregistré", luggageCount: 2, luggageScanned: true },
-      { name: "Syntyche Toukam", phone: "+237 677 44 55 66", seat: "2B (VIP)", status: "Payé", luggageCount: 1, luggageScanned: false },
-      { name: "Jean-Pierre Talla", phone: "+237 655 77 88 99", seat: "4C", status: "Payé", luggageCount: 3, luggageScanned: true },
-      { name: "Carine Bella", phone: "+237 691 12 34 56", seat: "5D", status: "En attente", luggageCount: 0, luggageScanned: false },
-      { name: "Patrick Fotso", phone: "+237 670 98 76 54", seat: "8A", status: "Payé", luggageCount: 2, luggageScanned: false },
-      { name: "Sandra Kamdem", phone: "+237 650 11 22 33", seat: "9B", status: "Enregistré", luggageCount: 1, luggageScanned: true },
-      { name: "Aboubakar Siddiki", phone: "+237 699 77 66 55", seat: "12C", status: "Payé", luggageCount: 2, luggageScanned: false },
-      { name: "Chantal Ngo Ndom", phone: "+237 671 23 45 67", seat: "14D", status: "Payé", luggageCount: 3, luggageScanned: true }
-    ];
 
-    const newPassengersMap: { [journeyId: number]: Passenger[] } = {};
-    
-    journeysState.forEach(j => {
-      const seedCount = 4 + (j.id % 4);
-      const tripPassengers: Passenger[] = [];
+    const fetchAllPassengers = async () => {
+      const newPassengersMap: { [journeyId: number]: Passenger[] } = {};
       
-      for (let i = 0; i < seedCount; i++) {
-        const templateIdx = (j.id + i) % passengerTemplates.length;
-        const temp = passengerTemplates[templateIdx];
-        tripPassengers.push({
-          id: i + 1,
-          name: temp.name,
-          phone: temp.phone,
-          seat: temp.seat.includes("VIP") && !j.operator.toLowerCase().includes("vip") && !j.operator.toLowerCase().includes("executive") ? `${i + 3}A` : temp.seat,
-          status: temp.status as any,
-          luggageCount: temp.luggageCount,
-          luggageScanned: temp.luggageScanned
+      try {
+        await Promise.all(journeysState.map(async (j) => {
+          const res = await fetch(`${API_BASE}/passengers/${j.id}`);
+          if (res.ok) {
+            const rawPassengers = await res.json();
+            newPassengersMap[j.id] = rawPassengers.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              phone: p.phone,
+              seat: p.seat,
+              status: p.status,
+              luggageCount: p.luggage_count,
+              luggageScanned: p.luggage_scanned
+            }));
+          }
+        }));
+        setPassengersMap(newPassengersMap);
+      } catch {
+        // Fallback: generate simulated passengers
+        const passengerTemplates = [
+          { name: "Marc Ndip", phone: "+237 699 01 22 33", seat: "1A (VIP)", status: "Enregistré", luggageCount: 2, luggageScanned: true },
+          { name: "Syntyche Toukam", phone: "+237 677 44 55 66", seat: "2B (VIP)", status: "Payé", luggageCount: 1, luggageScanned: false },
+          { name: "Jean-Pierre Talla", phone: "+237 655 77 88 99", seat: "4C", status: "Payé", luggageCount: 3, luggageScanned: true },
+          { name: "Carine Bella", phone: "+237 691 12 34 56", seat: "5D", status: "En attente", luggageCount: 0, luggageScanned: false },
+          { name: "Patrick Fotso", phone: "+237 670 98 76 54", seat: "8A", status: "Payé", luggageCount: 2, luggageScanned: false }
+        ];
+        journeysState.forEach(j => {
+          const seedCount = 4 + (j.id % 4);
+          const tripPassengers: Passenger[] = [];
+          for (let i = 0; i < seedCount; i++) {
+            const temp = passengerTemplates[(j.id + i) % passengerTemplates.length];
+            tripPassengers.push({ id: i + 1, name: temp.name, phone: temp.phone, seat: temp.seat, status: temp.status as any, luggageCount: temp.luggageCount, luggageScanned: temp.luggageScanned });
+          }
+          newPassengersMap[j.id] = tripPassengers;
         });
+        setPassengersMap(newPassengersMap);
       }
-      
-      newPassengersMap[j.id] = tripPassengers;
-    });
+    };
 
-    setPassengersMap(newPassengersMap);
+    fetchAllPassengers();
   }, [journeysState]);
+
+  // Effect to re-hydrate messages and profile when selected agency changes
+  useEffect(() => {
+    if (!selectedAgencyName || !isMounted) return;
+    
+    const refetchForAgency = async () => {
+      try {
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`);
+        if (msgRes.ok) {
+          const rawThreads = await msgRes.json();
+          const mapped: { [contactId: string]: ChatMessage[] } = {};
+          Object.keys(rawThreads).forEach(threadId => {
+            mapped[threadId] = rawThreads[threadId].map((m: any) => ({
+              id: m.id,
+              sender: m.sender as "agency" | "contact",
+              text: m.text,
+              time: m.time
+            }));
+          });
+          setChatThreads(mapped);
+        }
+      } catch (err) {
+        console.error("⚠️ Error refetching messages:", err);
+      }
+
+      try {
+        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${currentAgencyId}`);
+        if (profileRes.ok) {
+          const p = await profileRes.json();
+          setProfileEmail(p.email || "");
+          setProfilePhone(p.phone || "");
+          setProfileAddress(p.address || "");
+          setProfileDescription(p.description || "");
+        }
+      } catch (err) {
+        console.error("⚠️ Error refetching profile:", err);
+      }
+    };
+
+    refetchForAgency();
+  }, [selectedAgencyName, isMounted, currentAgencyId]);
 
   const showToast = (message: string, isSuccess = true) => {
     setToastMessage(message);
@@ -463,47 +489,83 @@ export default function AgencyDashboard() {
       labelAmenities.push("Sièges VIP");
     }
 
-    const newJourney: Journey = {
-      id: Date.now(),
-      type: "bus",
-      operator: `${activeAgencyObj.name} ${busClass}`,
-      logo: activeAgencyObj.logo,
-      depTime: depTime,
-      arrTime: arrTimeStr,
-      duration: "4h15",
-      depStation: finalDepStation,
-      arrStation: finalArrStation,
-      price: priceNum,
-      amenities: labelAmenities,
-      amenityKeys: selectedAmenities
+    // POST new journey to backend API
+    const createJourneyApi = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/journeys`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            operator: `${activeAgencyObj.name} ${busClass}`,
+            logo: activeAgencyObj.logo,
+            dep_time: depTime,
+            arr_time: arrTimeStr,
+            duration: "4h15",
+            dep_station: finalDepStation,
+            arr_station: finalArrStation,
+            price: priceNum,
+            amenities: labelAmenities,
+            amenity_keys: selectedAmenities,
+            agency_name: activeAgencyObj.name
+          })
+        });
+        if (res.ok) {
+          const created = await res.json();
+          const newJourney: Journey = {
+            id: created.id,
+            type: "bus",
+            operator: created.operator,
+            logo: created.logo,
+            depTime: created.dep_time,
+            arrTime: created.arr_time,
+            duration: created.duration,
+            depStation: created.dep_station,
+            arrStation: created.arr_station,
+            price: created.price,
+            amenities: created.amenities || [],
+            amenityKeys: created.amenity_keys || []
+          };
+          setJourneysState(prev => [...prev, newJourney]);
+          setSelectedJourneyId(newJourney.id);
+          showToast(`Super ! Le trajet ${depCity} → ${arrCity} (${depTime}) est planifié et publié sur SafeTrip.`);
+        } else { throw new Error("API error"); }
+      } catch {
+        // Fallback to localStorage
+        const newJourney: Journey = {
+          id: Date.now(),
+          type: "bus",
+          operator: `${activeAgencyObj.name} ${busClass}`,
+          logo: activeAgencyObj.logo,
+          depTime: depTime,
+          arrTime: arrTimeStr,
+          duration: "4h15",
+          depStation: finalDepStation,
+          arrStation: finalArrStation,
+          price: priceNum,
+          amenities: labelAmenities,
+          amenityKeys: selectedAmenities
+        };
+        const updatedJourneys = [...journeysState, newJourney];
+        localStorage.setItem("safetrip_journeys", JSON.stringify(updatedJourneys));
+        setJourneysState(updatedJourneys);
+        setSelectedJourneyId(newJourney.id);
+        showToast(`Super ! Le trajet ${depCity} → ${arrCity} (${depTime}) est planifié et publié sur SafeTrip (hors-ligne).`);
+      }
+
+      setDepCity("");
+      setArrCity("");
+      setTicketPrice("");
+      setDepTime("08:00");
+      setSelectedAmenities([]);
     };
 
-    const updatedJourneys = [...journeysState, newJourney];
-    localStorage.setItem("safetrip_journeys", JSON.stringify(updatedJourneys));
-    setJourneysState(updatedJourneys);
-    setSelectedJourneyId(newJourney.id);
-
-    const defaultNewPassengers: Passenger[] = [
-      { id: 1, name: "Albert Eyidi", phone: "+237 699 90 90 90", seat: "1A (VIP)", status: "Payé", luggageCount: 2, luggageScanned: false },
-      { id: 2, name: "Marie-Louise Atangana", phone: "+237 671 80 80 80", seat: "2B (VIP)", status: "Payé", luggageCount: 1, luggageScanned: false }
-    ];
-    setPassengersMap(prev => ({
-      ...prev,
-      [newJourney.id]: defaultNewPassengers
-    }));
-
-    setDepCity("");
-    setArrCity("");
-    setTicketPrice("");
-    setDepTime("08:00");
-    setSelectedAmenities([]);
-    
-    showToast(`Super ! Le trajet ${depCity} → ${arrCity} (${depTime}) est planifié et publié sur SafeTrip.`);
+    createJourneyApi();
   };
 
-  const togglePassengerCheckIn = (passengerId: number) => {
+  const togglePassengerCheckIn = async (passengerId: number) => {
     if (selectedJourneyId === null) return;
     
+    // Optimistic UI update
     setPassengersMap(prev => {
       const currentList = prev[selectedJourneyId] || [];
       const updatedList = currentList.map(p => {
@@ -515,6 +577,11 @@ export default function AgencyDashboard() {
       });
       return { ...prev, [selectedJourneyId]: updatedList };
     });
+
+    // Persist to backend
+    try {
+      await fetch(`${API_BASE}/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT" });
+    } catch { /* silent fallback */ }
     
     showToast("Statut d'enregistrement du passager mis à jour.");
   };
@@ -524,10 +591,10 @@ export default function AgencyDashboard() {
     setActiveScanJourneyId(selectedJourneyId);
   };
 
-  const handleSimulateScanSuccess = () => {
+  const handleSimulateScanSuccess = async () => {
     if (scanningPassenger === null || activeScanJourneyId === null) return;
 
-    // 1. Update passenger scan status
+    // 1. Update passenger scan status (optimistic)
     setPassengersMap(prev => {
       const currentList = prev[activeScanJourneyId] || [];
       const updatedList = currentList.map(p => {
@@ -539,9 +606,15 @@ export default function AgencyDashboard() {
       return { ...prev, [activeScanJourneyId]: updatedList };
     });
 
-    // 2. Generate or update colis registered under this passenger's simulation in colisState
+    // Persist scan to backend
+    try {
+      await fetch(`${API_BASE}/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT" });
+    } catch { /* silent fallback */ }
+
+    // 2. Generate or update colis
     const newColis: Colis = {
       id: `BAG-2026-FX${activeScanJourneyId.toString().slice(-2)}-${scanningPassenger.id}`,
+      agencyId: currentAgencyId,
       label: `Bagage de ${scanningPassenger.name}`,
       type: "Valise",
       weight: 12 + scanningPassenger.id * 2,
@@ -556,9 +629,7 @@ export default function AgencyDashboard() {
 
     setColisState(prev => {
       const filtered = prev.filter(c => c.id !== newColis.id);
-      const updated = [newColis, ...filtered];
-      localStorage.setItem("safetrip_colis_db", JSON.stringify(updated));
-      return updated;
+      return [newColis, ...filtered];
     });
 
     showToast(`QR Code validé ! Passager ${scanningPassenger.name} enregistré et bagages scannés.`);
@@ -566,15 +637,16 @@ export default function AgencyDashboard() {
   };
 
   // Send a custom chat message and trigger instant simulated reply
-  const handleSendChatMessage = (e: React.FormEvent) => {
+  const handleSendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInputText.trim()) return;
 
+    const timeStr = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
     const newMsg: ChatMessage = {
       id: Date.now(),
       sender: "agency",
       text: chatInputText,
-      time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+      time: timeStr
     };
 
     setChatThreads(prev => ({
@@ -583,8 +655,17 @@ export default function AgencyDashboard() {
     }));
     setChatInputText("");
 
+    // Persist to backend
+    try {
+      await fetch(`${API_BASE}/messages/${activeContactId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender: "agency", text: chatInputText, time: timeStr, agency_id: 1 })
+      });
+    } catch { /* silent fallback */ }
+
     // Simulate smart dynamic reply in 1.5 seconds
-    setTimeout(() => {
+    setTimeout(async () => {
       let replyText = "Entendu, notre équipe prend en charge votre demande.";
       if (activeContactId === "support") {
         replyText = "Nous avons bien reçu vos documents d'immatriculation. La nouvelle ligne sera active d'ici 30 minutes après vérification administrative. Merci !";
@@ -594,30 +675,52 @@ export default function AgencyDashboard() {
         replyText = "C'est noté, je réserverai à nouveau chez vous pour mon prochain déplacement.";
       }
 
+      const replyTime = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
       const replyMsg: ChatMessage = {
         id: Date.now() + 1,
         sender: "contact",
         text: replyText,
-        time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+        time: replyTime
       };
 
       setChatThreads(prev => ({
         ...prev,
         [activeContactId]: [...(prev[activeContactId] || []), replyMsg]
       }));
+
+      // Persist reply to backend
+      try {
+        await fetch(`${API_BASE}/messages/${activeContactId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sender: "contact", text: replyText, time: replyTime, agency_id: 1 })
+        });
+      } catch { /* silent fallback */ }
     }, 1500);
   };
 
   // Save profile administrative changes
-  const handleSaveAgencyProfile = (e: React.FormEvent) => {
+  const handleSaveAgencyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     const customProfile = {
+      agency_id: 1,
       email: profileEmail,
       phone: profilePhone,
       address: profileAddress,
       description: profileDescription
     };
-    localStorage.setItem("safetrip_agency_profile_custom", JSON.stringify(customProfile));
+
+    try {
+      await fetch(`${API_BASE}/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(customProfile)
+      });
+    } catch {
+      // Fallback to localStorage
+      localStorage.setItem("safetrip_agency_profile_custom", JSON.stringify(customProfile));
+    }
+
     setProfileEditing(false);
     showToast("Profil de l'agence sauvegardé avec succès ! ✅");
   };
@@ -671,8 +774,12 @@ export default function AgencyDashboard() {
   const activePassengers = selectedJourneyId !== null ? (passengersMap[selectedJourneyId] || []) : [];
 
   const totalSales = agencyJourneys.reduce((sum, j) => {
-    const passCount = passengersMap[j.id]?.length || 4;
+    const passCount = passengersMap[j.id]?.length || 0;
     return sum + (j.price * passCount);
+  }, 0);
+
+  const totalReservations = agencyJourneys.reduce((sum, j) => {
+    return sum + (passengersMap[j.id]?.length || 0);
   }, 0);
   
   const totalLuggage = agencyJourneys.reduce((sum, j) => {
@@ -685,12 +792,109 @@ export default function AgencyDashboard() {
     return sum + list.filter(p => p.luggageScanned).reduce((lSum, p) => lSum + p.luggageCount, 0);
   }, 0);
 
-  // Chat contacts summary
-  const chatContacts = [
-    { id: "support", name: "Support SafeTrip", short: "ST", online: true, lastMsg: chatThreads.support[chatThreads.support.length - 1]?.text || "" },
-    { id: "marc", name: "Marc Nzenang", short: "MN", online: false, lastMsg: chatThreads.marc[chatThreads.marc.length - 1]?.text || "" },
-    { id: "syntyche", name: "Syntyche Toukam", short: "ST", online: true, lastMsg: chatThreads.syntyche[chatThreads.syntyche.length - 1]?.text || "" }
-  ];
+  // Compute average occupancy rate from active buses
+  const agencyBuses = busesState.filter(b => b.agencyId === currentAgencyId);
+  const activeBuses = agencyBuses.filter(b => b.status !== "En maintenance");
+  const avgOccupancy = activeBuses.length > 0
+    ? (activeBuses.reduce((sum, b) => sum + (b.occupied / b.capacity), 0) / activeBuses.length) * 100
+    : 84.5; // fallback to default
+
+  // Dynamically build chatContacts from actual database chatThreads keys
+  const chatContacts = Object.keys(chatThreads).map(threadId => {
+    let name = "Client SafeTrip";
+    let short = "CL";
+    if (threadId === "support") {
+      name = "Support SafeTrip";
+      short = "ST";
+    } else if (threadId === "marc" || threadId.toLowerCase().includes("marc")) {
+      name = "Marc Nzenang";
+      short = "MN";
+    } else if (threadId === "syntyche" || threadId.toLowerCase().includes("syntyche")) {
+      name = "Syntyche Toukam";
+      short = "ST";
+    } else if (threadId === "jean-client") {
+      name = "Jean Client";
+      short = "JC";
+    } else {
+      name = threadId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      short = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+    }
+
+    const threadMsgs = chatThreads[threadId] || [];
+    const lastMsgObj = threadMsgs[threadMsgs.length - 1];
+    
+    return {
+      id: threadId,
+      name,
+      short,
+      online: threadId === "support" || threadId.includes("syntyche"),
+      lastMsg: lastMsgObj ? lastMsgObj.text : "Aucun message",
+      time: lastMsgObj ? lastMsgObj.time : "12:00"
+    };
+  });
+
+  // Construct recent activities dynamically from DB
+  const recentActivities: any[] = [];
+
+  // 1. Latest planned journeys
+  const sortedJourneysForActivities = [...agencyJourneys].sort((a, b) => b.id - a.id);
+  sortedJourneysForActivities.slice(0, 2).forEach(j => {
+    recentActivities.push({
+      id: `journey-${j.id}`,
+      title: `Trajet ${j.depStation.split(" - ")[0]} → ${j.arrStation.split(" - ")[0]} planifié`,
+      meta: `Départ : ${j.depTime} · ${j.price.toLocaleString()} FCFA · ${passengersMap[j.id]?.length || 0} voyageurs`,
+      icon: "✓",
+      bg: "rgba(0,103,60,0.1)",
+      color: "#00673C"
+    });
+  });
+
+  // 2. Latest scanned colis/baggages
+  const sortedColisForActivities = [...agencyColis].sort((a, b) => b.id.localeCompare(a.id));
+  sortedColisForActivities.slice(0, 2).forEach(c => {
+    recentActivities.push({
+      id: `colis-${c.id}`,
+      title: `Bagage ${c.id} (${c.label}) enregistré`,
+      meta: `Statut : ${c.status} · Poids : ${c.weight} kg`,
+      icon: "▣",
+      bg: "rgba(251,166,0,0.1)",
+      color: "#b7791f"
+    });
+  });
+
+  // 3. Latest messages in threads
+  Object.keys(chatThreads).slice(0, 2).forEach(threadId => {
+    const threadMsgs = chatThreads[threadId] || [];
+    if (threadMsgs.length > 0) {
+      const lastMsg = threadMsgs[threadMsgs.length - 1];
+      let senderName = "Support SafeTrip";
+      if (threadId === "jean-client") senderName = "Jean Client";
+      else if (threadId === "marc") senderName = "Marc Nzenang";
+      else if (threadId === "syntyche") senderName = "Syntyche Toukam";
+      else if (threadId !== "support") senderName = threadId.replace("-", " ");
+      
+      recentActivities.push({
+        id: `msg-${threadId}`,
+        title: `Message dans discussion : ${senderName}`,
+        meta: lastMsg.text.length > 60 ? `${lastMsg.text.slice(0, 60)}...` : lastMsg.text,
+        icon: "✉",
+        bg: "rgba(49,130,206,0.1)",
+        color: "#2b6cb0"
+      });
+    }
+  });
+
+  // If empty list, put a nice dynamic placeholder
+  if (recentActivities.length === 0) {
+    recentActivities.push({
+      id: "empty",
+      title: "Aucune activité récente",
+      meta: "Planifiez un trajet ou scannez des bagages pour voir l'historique en temps réel.",
+      icon: "ℹ",
+      bg: "rgba(113,128,150,0.1)",
+      color: "#4a5568"
+    });
+  }
 
   return (
     <div className={styles.clientDashboardLayout}>
@@ -833,19 +1037,10 @@ export default function AgencyDashboard() {
           </div>
 
           <div className={styles.bannerControls} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>SIMULATION CONTEXTE :</span>
-            <select 
-              className={styles.agencySelector}
-              value={selectedAgencyName}
-              onChange={(e) => handleAgencySwitch(e.target.value)}
-              style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff", padding: "6px 12px", borderRadius: "8px", fontWeight: "700" }}
-            >
-              {PARTNER_AGENCIES.map(agency => (
-                <option key={agency.name} value={agency.name} style={{ color: "#000000" }}>
-                  {agency.name}
-                </option>
-              ))}
-            </select>
+            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.7)", letterSpacing: "0.5px" }}>CONNECTÉ EN TANT QUE :</span>
+            <span style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", fontSize: "0.82rem", fontFamily: "monospace" }}>
+              {email}
+            </span>
           </div>
         </div>
 
@@ -864,7 +1059,7 @@ export default function AgencyDashboard() {
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Chiffre d&apos;Affaires</span>
                   <span className={styles.statValue}>{totalSales.toLocaleString()} FCFA</span>
-                  <span className={`${styles.statTrend} ${styles.trendUp}`}>▲ +14% aujourd&apos;hui</span>
+                  <span className={styles.statTrend} style={{ color: "#2f855a" }}>● {totalReservations} billet{totalReservations !== 1 ? "s" : ""} payé{totalReservations !== 1 ? "s" : ""}</span>
                 </div>
               </div>
 
@@ -877,7 +1072,7 @@ export default function AgencyDashboard() {
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Trajets Actifs</span>
                   <span className={styles.statValue}>{agencyJourneys.length} Horaires</span>
-                  <span className={styles.statTrend} style={{ color: "#718096" }}>● 100% opérationnels</span>
+                  <span className={styles.statTrend} style={{ color: "#744210" }}>● {agencyJourneys.filter(j => j.isNight).length} horaire{agencyJourneys.filter(j => j.isNight).length !== 1 ? "s" : ""} nocturne{agencyJourneys.filter(j => j.isNight).length !== 1 ? "s" : ""}</span>
                 </div>
               </div>
 
@@ -892,8 +1087,8 @@ export default function AgencyDashboard() {
                 </div>
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Taux Moyen de Remplissage</span>
-                  <span className={styles.statValue}>84.5%</span>
-                  <span className={`${styles.statTrend} ${styles.trendUp}`}>▲ +3.2% vs hier</span>
+                  <span className={styles.statValue}>{avgOccupancy.toFixed(1)}%</span>
+                  <span className={styles.statTrend} style={{ color: "#3182ce" }}>● {activeBuses.length} bus opérationnel{activeBuses.length !== 1 ? "s" : ""}</span>
                 </div>
               </div>
 
@@ -919,27 +1114,17 @@ export default function AgencyDashboard() {
                   <h2 className={styles.panelTitle}>Activités Récentes de l&apos;Agence</h2>
                 </div>
                 <div className={styles.panelBody} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-                  <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid #f7fafc", paddingBottom: "12px" }}>
-                    <div style={{ background: "rgba(0,103,60,0.1)", color: "#00673C", width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontStyle: "normal", fontSize: "0.8rem", fontWeight: "800", flexShrink: 0 }}>✓</div>
-                    <div>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1a202c" }}>Trajet Douala → Yaoundé planifié</div>
-                      <div style={{ fontSize: "0.7rem", color: "#a0aec0" }}>Il y a 5 minutes · Bus VIP</div>
+                  {recentActivities.map(activity => (
+                    <div key={activity.id} style={{ display: "flex", gap: "12px", borderBottom: "1px solid #f7fafc", paddingBottom: "12px" }}>
+                      <div style={{ background: activity.bg, color: activity.color, width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontStyle: "normal", fontSize: "0.8rem", fontWeight: "800", flexShrink: 0 }}>
+                        {activity.icon}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1a202c" }}>{activity.title}</div>
+                        <div style={{ fontSize: "0.7rem", color: "#a0aec0" }}>{activity.meta}</div>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid #f7fafc", paddingBottom: "12px" }}>
-                    <div style={{ background: "rgba(251,166,0,0.1)", color: "#b7791f", width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontStyle: "normal", fontSize: "0.8rem", fontWeight: "800", flexShrink: 0 }}>▣</div>
-                    <div>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1a202c" }}>Bagage BAG-2026-FX58-A scanné</div>
-                      <div style={{ fontSize: "0.7rem", color: "#a0aec0" }}>Il y a 12 minutes · Passager Marc Ndip</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: "12px", borderBottom: "1px solid #f7fafc", paddingBottom: "12px" }}>
-                    <div style={{ background: "rgba(49,130,206,0.1)", color: "#2b6cb0", width: "28px", height: "28px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontStyle: "normal", fontSize: "0.8rem", fontWeight: "800", flexShrink: 0 }}>✉</div>
-                    <div>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#1a202c" }}>Nouveau message reçu du Support SafeTrip</div>
-                      <div style={{ fontSize: "0.7rem", color: "#a0aec0" }}>Il y a 25 minutes · Assistance administrative</div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 
@@ -969,12 +1154,12 @@ export default function AgencyDashboard() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
               <div>
                 <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#0A2F1D" }}>Gestion de la Flotte de Bus</h2>
-                <p style={{ fontSize: "0.8rem", color: "#718096" }}>{busesState.length} bus actifs répertoriés</p>
+                <p style={{ fontSize: "0.8rem", color: "#718096" }}>{busesState.filter(bus => bus.agencyId === currentAgencyId).length} bus actifs répertoriés</p>
               </div>
             </div>
 
             <div className={styles.busGrid}>
-              {busesState.map(bus => (
+              {busesState.filter(bus => bus.agencyId === currentAgencyId).map(bus => (
                 <div key={bus.id} className={styles.busCard}>
                   {/* Status Pill top-right */}
                   <span className={`${styles.busStatusBadge} ${

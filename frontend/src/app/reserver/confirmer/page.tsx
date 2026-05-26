@@ -51,12 +51,24 @@ export default function ConfirmerReservation() {
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"om" | "momo" | "carte" | null>(null);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [transactionRef, setTransactionRef] = useState("");
   const [cardNumber, setCardNumber] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [ticketId, setTicketId] = useState("");
   const [clientName, setClientName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isToastSuccess, setIsToastSuccess] = useState(true);
+
+  const showToast = (message: string, isSuccess = true) => {
+    setToastMessage(message);
+    setIsToastSuccess(isSuccess);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+  };
 
   useEffect(() => {
     // Read booked journey from localStorage
@@ -66,22 +78,10 @@ export default function ConfirmerReservation() {
     }
 
     // Read client info
-    const savedAdmins = localStorage.getItem("safetrip_registered_admins");
-    const activeEmail = localStorage.getItem("safetrip_active_email") || "";
+    const activeEmail = localStorage.getItem("safetrip_user_email") || "";
     setClientEmail(activeEmail);
-
-    if (savedAdmins) {
-      const users = JSON.parse(savedAdmins);
-      const user = users.find((u: any) => u.email?.toLowerCase() === activeEmail.toLowerCase());
-      if (user) {
-        setClientName(user.adminName || activeEmail.split("@")[0]);
-        setClientPhone(user.phone || "+237 6XX XX XX XX");
-      } else {
-        setClientName(activeEmail.split("@")[0]);
-      }
-    } else {
-      setClientName(activeEmail.split("@")[0]);
-    }
+    setClientName(localStorage.getItem("safetrip_user_name") || activeEmail.split("@")[0] || "Voyageur SafeTrip");
+    setClientPhone(localStorage.getItem("safetrip_user_phone") || "+237 600 00 00 00");
 
     // Generate ticket ID
     setTicketId(`ST-${new Date().getFullYear()}-${String(Date.now()).slice(-7)}`);
@@ -92,16 +92,141 @@ export default function ConfirmerReservation() {
     setSelectedSeat(selectedSeat === seatId ? null : seatId);
   };
 
-  const handlePay = () => {
-    if (!paymentMethod) return;
-    if ((paymentMethod === "om" || paymentMethod === "momo") && !phoneNumber) return;
-    if (paymentMethod === "carte" && !cardNumber) return;
+  const handlePay = async () => {
+    if (!paymentMethod || !journey) return;
+    if ((paymentMethod === "om" || paymentMethod === "momo") && (!phoneNumber || !transactionRef)) {
+      showToast("Veuillez renseigner votre numéro de téléphone et la référence de transaction SMS.", false);
+      return;
+    }
+    if (paymentMethod === "carte" && !cardNumber) {
+      showToast("Veuillez renseigner votre numéro de carte bancaire.", false);
+      return;
+    }
 
     setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
+
+    const clientId = localStorage.getItem("safetrip_user_id");
+    const name = localStorage.getItem("safetrip_user_name") || clientName || "Jean Client";
+    const phone = phoneNumber || clientPhone;
+
+    try {
+      const response = await fetch("http://localhost:5000/api/client/reserver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          journey_id: journey.id,
+          client_id: clientId,
+          name,
+          phone,
+          seat: selectedSeat,
+          luggage_count: 1, // Bagage par défaut pour la démo
+          payment_reference: transactionRef || cardNumber
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ticketId) {
+        setTicketId(data.ticketId);
+        showToast("Paiement validé avec succès ! Votre billet a été généré. 🎉");
+        
+        // Stockage dans l'historique local pour enrichir le dashboard voyageur
+        const newTicket = {
+          id: data.ticketId,
+          from: journey.depStation.split(" - ")[0]?.trim(),
+          to: journey.arrStation.split(" - ")[0]?.trim(),
+          company: journey.operator,
+          companyLogo: journey.logo,
+          date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }),
+          depTime: journey.depTime,
+          arrTime: journey.arrTime,
+          duration: journey.duration,
+          seat: selectedSeat,
+          luggageCount: 1,
+          status: "Actif",
+          price: journey.price,
+          depStation: journey.depStation,
+          arrStation: journey.arrStation,
+          passenger: name,
+          phone: phone,
+          busClass: journey.operator?.split(' ').slice(-1)[0] || 'Confort'
+        };
+        const currentHist = JSON.parse(localStorage.getItem("safetrip_journeys") || "[]");
+        localStorage.setItem("safetrip_journeys", JSON.stringify([newTicket, ...currentHist]));
+        
+        // Stockage également du colis bagage lié
+        const newColis = {
+          id: `BAG-2026-FX${journey.id.toString().slice(-2)}-${Math.floor(Math.random() * 100)}`,
+          label: `Bagage principal de ${name}`,
+          type: "Sac",
+          weight: 15,
+          color: "Noir",
+          status: "En attente de scan",
+          trip: `${journey.depStation.split(" - ")[0]?.trim()} → ${journey.arrStation.split(" - ")[0]?.trim()}`,
+          tripDate: `${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })} · ${journey.depTime}`,
+          agency: journey.operator.split(" VIP")[0].split(" Confort")[0].split(" Classique")[0],
+          agencyLogo: journey.logo,
+          qrRef: `QR-FX${journey.id.toString().slice(-2)}-LUGGAGE`,
+          fragile: false
+        };
+        const currentColisHist = JSON.parse(localStorage.getItem("safetrip_colis_db") || "[]");
+        localStorage.setItem("safetrip_colis_db", JSON.stringify([newColis, ...currentColisHist]));
+
+        setStep(3);
+      } else {
+        showToast(data.error || "Erreur de traitement du paiement.", false);
+      }
+    } catch (err) {
+      console.warn("⚠️ API hors ligne. Validation en mode simulation locale...", err);
+      
+      const mockTicketId = `ST-2026-FX${Math.floor(Math.random() * 1000) + 200}`;
+      setTicketId(mockTicketId);
+      
+      const newTicket = {
+        id: mockTicketId,
+        from: journey.depStation.split(" - ")[0]?.trim(),
+        to: journey.arrStation.split(" - ")[0]?.trim(),
+        company: journey.operator,
+        companyLogo: journey.logo,
+        date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" }),
+        depTime: journey.depTime,
+        arrTime: journey.arrTime,
+        duration: journey.duration,
+        seat: selectedSeat,
+        luggageCount: 1,
+        status: "Actif",
+        price: journey.price,
+        depStation: journey.depStation,
+        arrStation: journey.arrStation,
+        passenger: name,
+        phone: phone,
+        busClass: journey.operator?.split(' ').slice(-1)[0] || 'Confort'
+      };
+      const currentHist = JSON.parse(localStorage.getItem("safetrip_journeys") || "[]");
+      localStorage.setItem("safetrip_journeys", JSON.stringify([newTicket, ...currentHist]));
+
+      const newColis = {
+        id: `BAG-2026-FX${journey.id.toString().slice(-2)}-${Math.floor(Math.random() * 100)}`,
+        label: `Bagage principal de ${name}`,
+        type: "Sac",
+        weight: 15,
+        color: "Noir",
+        status: "En attente de scan",
+        trip: `${journey.depStation.split(" - ")[0]?.trim()} → ${journey.arrStation.split(" - ")[0]?.trim()}`,
+        tripDate: `${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })} · ${journey.depTime}`,
+        agency: journey.operator.split(" VIP")[0].split(" Confort")[0].split(" Classique")[0],
+        agencyLogo: journey.logo,
+        qrRef: `QR-FX${journey.id.toString().slice(-2)}-LUGGAGE`,
+        fragile: false
+      };
+      const currentColisHist = JSON.parse(localStorage.getItem("safetrip_colis_db") || "[]");
+      localStorage.setItem("safetrip_colis_db", JSON.stringify([newColis, ...currentColisHist]));
+
+      showToast("Paiement validé avec succès ! Billet généré (Simulation). 🎉");
       setStep(3);
-    }, 2500);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDownload = () => {
@@ -138,6 +263,34 @@ export default function ConfirmerReservation() {
 
   return (
     <main className={styles.main}>
+      {toastMessage && (
+        <div style={{
+          position: "fixed",
+          top: "20px",
+          right: "20px",
+          zIndex: 9999,
+          background: isToastSuccess ? "#00673C" : "#ef4444",
+          color: "#ffffff",
+          padding: "12px 24px",
+          borderRadius: "10px",
+          boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          fontWeight: "700",
+          fontSize: "0.82rem",
+          fontFamily: "'Poppins', sans-serif"
+        }}>
+          <span>{toastMessage}</span>
+          <button 
+            style={{ background: "none", border: "none", color: "#ffffff", fontSize: "1.1rem", cursor: "pointer", fontWeight: "900", padding: 0 }} 
+            onClick={() => setToastMessage(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerContent}>
@@ -336,18 +489,66 @@ export default function ConfirmerReservation() {
 
               {/* Payment Form */}
               {paymentMethod && (
-                <div className={styles.paymentFormArea}>
-                  <div className={styles.paymentFormTitle}>
-                    {paymentMethod === "om" ? "Numéro Orange Money" : paymentMethod === "momo" ? "Numéro MTN MoMo" : "Numéro de carte bancaire"}
+                <div className={styles.paymentFormArea} style={{ background: "#ffffff", padding: "20px", borderRadius: "14px", border: "1px solid #edf2f7", marginTop: "15px" }}>
+                  <div className={styles.paymentFormTitle} style={{ fontWeight: 800, color: "#1a202c", marginBottom: "12px", fontSize: "0.85rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {paymentMethod === "om" ? "Paiement par Orange Money" : paymentMethod === "momo" ? "Paiement par MTN Mobile Money" : "Informations de Carte Bancaire"}
                   </div>
+
                   {(paymentMethod === "om" || paymentMethod === "momo") ? (
-                    <input
-                      type="text"
-                      className={styles.paymentInput}
-                      placeholder={paymentMethod === "om" ? "ex: 699 01 22 33" : "ex: 677 44 55 66"}
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                      {/* USSD Instruction premium Box */}
+                      <div style={{ background: "rgba(0,103,60,0.04)", border: "1px solid rgba(0,103,60,0.1)", padding: "15px", borderRadius: "10px", fontSize: "0.76rem", lineHeight: "1.4", color: "#0A2F1D" }}>
+                        <span style={{ display: "block", fontWeight: "800", marginBottom: "6px" }}>👉 CONSIGNES DE PAIEMENT MANUEL :</span>
+                        Composez le code USSD ci-dessous sur votre téléphone portable avec votre compte {paymentMethod === "om" ? "Orange" : "MTN"} pour effectuer le dépôt de <strong>{journey.price.toLocaleString()} FCFA</strong> vers le compte de l'agence SafeTrip :
+                        
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "12px", background: "#ffffff", padding: "8px 12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                          <span style={{ fontFamily: "monospace", fontWeight: "900", fontSize: "0.95rem", color: "#00673C", flex: 1 }}>
+                            {paymentMethod === "om" ? "#150*11*655462642#" : "*126*1*1*655462642#"}
+                          </span>
+                          <button
+                            type="button"
+                            style={{ background: "#e2e8f0", color: "#4a5568", border: "none", padding: "4px 10px", borderRadius: "6px", fontSize: "0.7rem", fontWeight: "800", cursor: "pointer" }}
+                            onClick={() => {
+                              navigator.clipboard.writeText(paymentMethod === "om" ? "#150*11*655462642#" : "*126*1*1*655462642#");
+                              showToast("Code USSD copié dans le presse-papiers !");
+                            }}
+                          >
+                            Copier
+                          </button>
+                        </div>
+
+                        {/* Dial shortcut */}
+                        <a 
+                          href={paymentMethod === "om" ? "tel:%23150*11*655462642%23" : "tel:*126*1*1*655462642%23"}
+                          style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#00673C", color: "#ffffff", padding: "8px 14px", borderRadius: "8px", textDecoration: "none", fontWeight: "800", fontSize: "0.72rem", marginTop: "12px", transition: "transform 0.2s" }}
+                          onClick={() => showToast("Ouverture de votre composeur téléphonique...")}
+                        >
+                          📞 Lancer l'appel USSD sur mobile
+                        </a>
+                      </div>
+
+                      <div className={styles.inputGroup} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#718096" }}>VOTRE NUMÉRO DE TÉLÉPHONE PAYEUR</label>
+                        <input
+                          type="text"
+                          className={styles.paymentInput}
+                          placeholder={paymentMethod === "om" ? "ex: 699 01 22 33" : "ex: 677 44 55 66"}
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                        />
+                      </div>
+
+                      <div className={styles.inputGroup} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#718096" }}>RÉFÉRENCE DE TRANSACTION (SMS REÇU)</label>
+                        <input
+                          type="text"
+                          className={styles.paymentInput}
+                          placeholder="ex: CO260526.1432.A12345"
+                          value={transactionRef}
+                          onChange={(e) => setTransactionRef(e.target.value)}
+                        />
+                      </div>
+                    </div>
                   ) : (
                     <>
                       <input
@@ -363,18 +564,20 @@ export default function ConfirmerReservation() {
                       </div>
                     </>
                   )}
+
                   <button
                     className={styles.payBtn}
                     onClick={handlePay}
-                    disabled={isProcessing || (!phoneNumber && paymentMethod !== "carte") || (!cardNumber && paymentMethod === "carte")}
+                    disabled={isProcessing || ((paymentMethod === "om" || paymentMethod === "momo") && (!phoneNumber || !transactionRef)) || (paymentMethod === "carte" && !cardNumber)}
+                    style={{ marginTop: "15px", width: "100%", height: "45px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: isProcessing ? "#cbd5e0" : "#00c070", color: "#ffffff", border: "none", borderRadius: "10px", fontWeight: "800", cursor: "pointer" }}
                   >
                     {isProcessing ? (
                       <>
                         <div className={styles.spinner}></div>
-                        Traitement en cours...
+                        Traitement de la transaction...
                       </>
                     ) : (
-                      `Payer CFA ${journey.price.toLocaleString()}`
+                      `Valider le paiement • CFA ${journey.price.toLocaleString()}`
                     )}
                   </button>
                 </div>

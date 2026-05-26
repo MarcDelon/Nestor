@@ -306,14 +306,46 @@ export default function Reserver() {
     const loginStatus = localStorage.getItem("safetrip_agency_logged_in") === "true";
     setIsAgencyLoggedIn(loginStatus);
 
-    // 2. Sync journeys list from localStorage database
-    const saved = localStorage.getItem("safetrip_journeys");
-    if (saved) {
-      setJourneysState(JSON.parse(saved));
-    } else {
-      localStorage.setItem("safetrip_journeys", JSON.stringify(journeys));
-      setJourneysState(journeys);
-    }
+    // 2. Fetch journeys list from the actual database API
+    const fetchJourneys = async () => {
+      try {
+        const response = await fetch("http://localhost:5000/api/agency/journeys/all");
+        if (response.ok) {
+          const data = await response.json();
+          // Database columns to camelCase matching the frontend's Journey interface
+          const formatted = (data || []).map((j: any) => ({
+            id: j.id,
+            type: "bus",
+            operator: j.operator,
+            logo: j.logo,
+            depTime: j.dep_time,
+            arrTime: j.arr_time,
+            duration: j.duration,
+            depStation: j.dep_station,
+            arrStation: j.arr_station,
+            price: j.price,
+            amenities: j.amenities || [],
+            amenityKeys: j.amenity_keys || [],
+            warning: j.warning,
+            isNight: j.is_night
+          }));
+          setJourneysState(formatted);
+          localStorage.setItem("safetrip_journeys", JSON.stringify(formatted));
+        } else {
+          setJourneysState([]);
+        }
+      } catch (err) {
+        console.warn("⚠️ API non joignable pour les trajets, utilisation du stockage local.", err);
+        const saved = localStorage.getItem("safetrip_journeys");
+        if (saved) {
+          setJourneysState(JSON.parse(saved));
+        } else {
+          setJourneysState([]);
+        }
+      }
+    };
+
+    fetchJourneys();
   }, []);
 
   const toggleConnection = (e: React.MouseEvent) => {
@@ -616,7 +648,14 @@ export default function Reserver() {
 
           {/* Right Column: Dynamic Ticket Listings */}
           <section className={styles.ticketsCol}>
-            {!hasSearched ? (
+            {journeysState.length === 0 ? (
+              <div className={styles.noResults} style={{ margin: 0, padding: '48px 32px', background: '#ffffff', borderRadius: '20px', border: '1px solid rgba(0, 0, 0, 0.03)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.02)' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>🚌</div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary-navy)', marginBottom: '8px' }}>Aucun voyage programmé</h3>
+                <p style={{ color: 'var(--text-gray)', fontSize: '0.92rem', lineHeight: 1.5, maxWidth: '480px', margin: '0 auto' }}>Aucune agence de transport partenaire n'a encore publié de bus, de trajet ni d'horaire dans la base de données.</p>
+                <p style={{ fontSize: '0.8rem', color: '#a0aec0', marginTop: '16px' }}>SafeTrip © 2026 — Base de données en temps réel connectée 🇨🇲</p>
+              </div>
+            ) : !hasSearched ? (
               <div className={styles.popularContainer}>
                 <div className={styles.popularIntro}>
                   <h2>Trajets les plus populaires 🔥</h2>

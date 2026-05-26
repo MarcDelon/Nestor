@@ -3,6 +3,7 @@
 import styles from "./page.module.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -66,57 +67,50 @@ export default function LoginPage() {
         localStorage.setItem("safetrip_logged_in", "true");
         localStorage.setItem("safetrip_token", data.token);
         localStorage.setItem("safetrip_user_role", data.user.role);
-        localStorage.setItem("safetrip_user_email", data.user.email);
         localStorage.setItem("safetrip_user_name", data.user.fullName);
+        localStorage.setItem("safetrip_user_email", data.user.email);
+        localStorage.setItem("safetrip_user_id", data.user.id);
+        localStorage.setItem("safetrip_user_photo", data.user.photo || "/images/default_avatar.png");
+        if (data.user.agencyId) {
+          localStorage.setItem("safetrip_agency_id", String(data.user.agencyId));
+        }
 
-        showToast(data.message || `Connexion réussie !`);
+        showToast(data.message || "Connexion réussie !");
+        
         setTimeout(() => {
           redirectBasedOnRole(data.user.role);
         }, 1000);
       } else {
-        showToast(data.error || "Erreur de connexion.", false);
+        showToast(data.error || "Adresse email ou mot de passe incorrect.", false);
       }
     } catch (err) {
       console.warn("⚠️ Mode local actif: Impossible de joindre le serveur backend.", err);
-      // Simulated Fallback for developer/offline testing
+      
+      // Fallback simulation locale pour faciliter les tests et la démo !
       const lowerEmail = email.toLowerCase();
-      let role: "client" | "agency" | "admin" = "client";
-      let activeAgency = "Finexs Voyage";
-      let welcomeMessage = "Bienvenue dans votre Espace Voyageur SafeTrip ! (Simulation Locale)";
-
+      let simulatedRole = "client";
+      let simulatedName = "Jean Client";
+      
       if (lowerEmail.includes("admin")) {
-        role = "admin";
-        welcomeMessage = "Bienvenue dans l'espace Administration ! (Simulation Locale)";
-      } else if (
-        lowerEmail.includes("agence") ||
-        lowerEmail.includes("finexs") ||
-        lowerEmail.includes("buca") ||
-        lowerEmail.includes("general") ||
-        lowerEmail.includes("touristique") ||
-        lowerEmail.includes("men")
-      ) {
-        role = "agency";
-        if (lowerEmail.includes("buca")) {
-          activeAgency = "Buca Voyage";
-        } else if (lowerEmail.includes("general")) {
-          activeAgency = "General Express";
-        } else if (lowerEmail.includes("touristique")) {
-          activeAgency = "Touristique Express";
-        } else if (lowerEmail.includes("men")) {
-          activeAgency = "Men Travel";
-        }
-        localStorage.setItem("safetrip_active_agency", activeAgency);
-        welcomeMessage = `Bienvenue dans l'administration de ${activeAgency} ! (Simulation Locale)`;
+        simulatedRole = "admin";
+        simulatedName = "Administrateur Principal";
+      } else if (lowerEmail.includes("finexs") || lowerEmail.includes("buca") || lowerEmail.includes("agency") || lowerEmail.includes("agence")) {
+        simulatedRole = "agency";
+        simulatedName = "Finexs Voyage";
+        localStorage.setItem("safetrip_agency_id", "1");
       }
-
+      
       localStorage.setItem("safetrip_logged_in", "true");
-      localStorage.setItem("safetrip_user_role", role);
-      localStorage.setItem("safetrip_user_email", email);
-      localStorage.setItem("safetrip_user_name", email.split("@")[0]);
-
-      showToast(welcomeMessage);
+      localStorage.setItem("safetrip_token", "simulated_token_12345");
+      localStorage.setItem("safetrip_user_role", simulatedRole);
+      localStorage.setItem("safetrip_user_name", simulatedName);
+      localStorage.setItem("safetrip_user_email", lowerEmail);
+      localStorage.setItem("safetrip_user_id", "simulated-id-999");
+      localStorage.setItem("safetrip_user_photo", simulatedRole === "agency" ? "/images/finexs.png" : simulatedRole === "admin" ? "/images/default_admin.png" : "/images/default_avatar.png");
+      
+      showToast(`Connexion réussie ! (Simulation Locale - ${simulatedRole})`);
       setTimeout(() => {
-        redirectBasedOnRole(role);
+        redirectBasedOnRole(simulatedRole);
       }, 1000);
     }
   };
@@ -160,7 +154,28 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f4f7f5" }}>
+    <main style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f4f7f5" }}>
+      {/* Frosted Header */}
+      <header className={styles.header}>
+        <div className={styles.headerContent}>
+          <Link href="/" className={styles.logoContainer}>
+            <img 
+              src="/images/logo-removebg-preview (2).png" 
+              alt="SafeTrip Logo" 
+              className={styles.logoImage}
+            />
+          </Link>
+          <nav className={styles.nav}>
+            <Link href="/reserver">Réserver</Link>
+            <Link href="/#agences">Agences</Link>
+            <Link href="/#tracabilite">Traçabilité</Link>
+          </nav>
+          <Link href="/" className={styles.headerBtn}>
+            Retour
+          </Link>
+        </div>
+      </header>
+
       {toastMessage && (
         <div className={`${styles.toast} ${isToastSuccess ? styles.toastSuccess : ""}`}>
           <span>{toastMessage}</span>
