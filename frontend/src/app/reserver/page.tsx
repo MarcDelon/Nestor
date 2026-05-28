@@ -2,6 +2,7 @@
 
 import styles from "./page.module.css";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 interface Journey {
@@ -17,21 +18,20 @@ interface Journey {
   price: number;
   amenities: string[];
   amenityKeys: string[];
+  busId?: string;
+  busCapacity?: number;
+  busClass?: string;
+  busOccupied?: number;
   warning?: string;
   isNight?: boolean;
 }
 
 const amenitiesList = [
-  { key: "maxBack", label: "Max. 2 à l'arrière", icon: "users" },
-  { key: "instant", label: "Réservation instantanée", icon: "zap" },
-  { key: "smoking", label: "Cigarette autorisée", icon: "cigarette" },
-  { key: "pets", label: "Animaux de compagnie autorisés", icon: "paw" },
   { key: "reclining", label: "Sièges inclinables", icon: "reclining" },
   { key: "plug", label: "Prises électriques", icon: "plug" },
   { key: "wifi", label: "Wi-Fi", icon: "wifi" },
   { key: "toilet", label: "Toilettes", icon: "toilet" },
   { key: "ac", label: "Climatisation", icon: "wind" },
-  { key: "ebillet", label: "E-billets", icon: "ticket" },
   { key: "pmr", label: "Personne à mobilité réduite", icon: "accessibility" },
   { key: "catering", label: "Service de restauration disponible", icon: "utensils" }
 ];
@@ -71,122 +71,7 @@ const popularRoutes = [
   }
 ];
 
-const journeys: Journey[] = [
-  {
-    id: 1,
-    type: "bus",
-    operator: "Finexs Voyage VIP",
-    logo: "/images/finexs.png",
-    depTime: "06:15",
-    arrTime: "10:30",
-    duration: "4h15",
-    depStation: "Douala - Agence Finexs Douala",
-    arrStation: "Yaoundé - Agence Finexs Mvan",
-    price: 6000,
-    amenities: ["USB", "AC", "Sièges VIP"],
-    amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "toilet"]
-  },
-  {
-    id: 2,
-    type: "bus",
-    operator: "Finexs Voyage VIP",
-    logo: "/images/finexs.png",
-    depTime: "08:00",
-    arrTime: "12:15",
-    duration: "4h15",
-    depStation: "Douala - Agence Finexs Douala",
-    arrStation: "Yaoundé - Agence Finexs Mvan",
-    price: 4000,
-    amenities: ["USB", "AC", "Sièges VIP"],
-    amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet"]
-  },
-  {
-    id: 3,
-    type: "bus",
-    operator: "Buca Voyage Confort",
-    logo: "/images/bucavoyage.png",
-    depTime: "10:30",
-    arrTime: "14:45",
-    duration: "4h15",
-    depStation: "Douala - Agence Buca Bessengue",
-    arrStation: "Yaoundé - Agence Buca Mvan",
-    price: 6000,
-    amenities: ["Prises", "Sièges VIP"],
-    amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "smoking"],
-    warning: "Bientôt complet",
-  },
-  {
-    id: 4,
-    type: "bus",
-    operator: "General Express Confort",
-    logo: "/images/General.png",
-    depTime: "13:00",
-    arrTime: "17:15",
-    duration: "4h15",
-    depStation: "Douala - Bessengue",
-    arrStation: "Yaoundé - Mvan",
-    price: 5000,
-    amenities: ["AC", "Prises"],
-    amenityKeys: ["ac", "ebillet", "pets", "instant"]
-  },
-  {
-    id: 5,
-    type: "bus",
-    operator: "Touristique Express VIP",
-    logo: "/images/Touristique.png",
-    depTime: "15:00",
-    arrTime: "19:15",
-    duration: "4h15",
-    depStation: "Douala - Agence Touristique Akwa",
-    arrStation: "Yaoundé - Agence Touristique Mvan",
-    price: 5000,
-    amenities: ["AC", "Prises", "Sièges VIP"],
-    amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "toilet"]
-  },
-  {
-    id: 6,
-    type: "bus",
-    operator: "Men Travel Executive Class",
-    logo: "/images/mentravel.png",
-    depTime: "16:30",
-    arrTime: "20:45",
-    duration: "4h15",
-    depStation: "Douala - Carrefour Akwa",
-    arrStation: "Yaoundé - Mvan",
-    price: 8000,
-    amenities: ["Wi-Fi", "AC", "Restauration", "Prises", "Boisson offerte"],
-    amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet", "toilet", "wifi", "catering", "pmr"]
-  },
-  {
-    id: 7,
-    type: "bus",
-    operator: "Finexs Voyage Classique",
-    logo: "/images/finexs.png",
-    depTime: "18:30",
-    arrTime: "22:45",
-    duration: "4h15",
-    depStation: "Douala - Agence Finexs Douala",
-    arrStation: "Yaoundé - Agence Finexs Mvan",
-    price: 3000,
-    amenities: ["AC"],
-    amenityKeys: ["instant", "reclining", "plug", "ac", "ebillet"]
-  },
-  {
-    id: 8,
-    type: "bus",
-    operator: "Buca Voyage Classique",
-    logo: "/images/bucavoyage.png",
-    depTime: "19:00",
-    arrTime: "23:15",
-    duration: "4h15",
-    depStation: "Douala - Bessengue",
-    arrStation: "Yaoundé - Mvan",
-    price: 3000,
-    amenities: ["AC"],
-    amenityKeys: ["smoking", "reclining", "plug"],
-    isNight: true,
-  }
-];
+
 
 function renderAmenityIcon(iconName: string) {
   switch (iconName) {
@@ -290,9 +175,10 @@ function renderAmenityIcon(iconName: string) {
 }
 
 export default function Reserver() {
+  const searchParams = useSearchParams();
   const [departure, setDeparture] = useState("");
   const [destination, setDestination] = useState("");
-  const [activeSort, setActiveSort] = useState<"time" | "price" | "duration">("price");
+  const [activeSorts, setActiveSorts] = useState<string[]>(["price"]);
   const [selectedJourney, setSelectedJourney] = useState<number | null>(null);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -300,16 +186,32 @@ export default function Reserver() {
   const [returnDate, setReturnDate] = useState("");
   const [isAgencyLoggedIn, setIsAgencyLoggedIn] = useState(false);
   const [journeysState, setJourneysState] = useState<Journey[]>([]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
+  const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
 
   useEffect(() => {
-    // 1. Sync connection status
-    const loginStatus = localStorage.getItem("safetrip_agency_logged_in") === "true";
-    setIsAgencyLoggedIn(loginStatus);
+    // 1. Sync connection status — check actual role, not obsolete key
+    const role = localStorage.getItem("safetrip_user_role");
+    const loggedIn = localStorage.getItem("safetrip_logged_in") === "true";
+    setIsAgencyLoggedIn(loggedIn && (role === "agency" || role === "admin"));
 
-    // 2. Fetch journeys list from the actual database API
+    // 2. Pre-fill search from URL params (from homepage search capsule)
+    const depParam = searchParams.get("dep");
+    const arrParam = searchParams.get("arr");
+    if (depParam && arrParam) {
+      setDeparture(depParam);
+      setDestination(arrParam);
+      setHasSearched(true);
+    }
+
+    // 3. Fetch journeys list from the actual database API (public route — no auth needed)
     const fetchJourneys = async () => {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
       try {
-        const response = await fetch("http://localhost:5000/api/agency/journeys/all");
+        const response = await fetch(`${apiBase}/api/agency/journeys/all`);
         if (response.ok) {
           const data = await response.json();
           // Database columns to camelCase matching the frontend's Journey interface
@@ -326,22 +228,22 @@ export default function Reserver() {
             price: j.price,
             amenities: j.amenities || [],
             amenityKeys: j.amenity_keys || [],
+            busId: j.bus_id,
+            busCapacity: j.buses?.capacity || j.bus_capacity || 40,
+            busClass: j.buses?.bus_class || j.bus_class,
+            busOccupied: j.buses?.occupied || j.bus_occupied || 0,
             warning: j.warning,
             isNight: j.is_night
           }));
           setJourneysState(formatted);
-          localStorage.setItem("safetrip_journeys", JSON.stringify(formatted));
         } else {
           setJourneysState([]);
         }
       } catch (err) {
-        console.warn("⚠️ API non joignable pour les trajets, utilisation du stockage local.", err);
-        const saved = localStorage.getItem("safetrip_journeys");
-        if (saved) {
-          setJourneysState(JSON.parse(saved));
-        } else {
-          setJourneysState([]);
-        }
+        console.error("⚠️ Error fetching journeys from Supabase:", err);
+        setJourneysState([]);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -371,14 +273,63 @@ export default function Reserver() {
       if (!j.amenityKeys?.includes(key)) return false;
     }
 
+    // 3. Class filter
+    if (selectedClasses.length > 0) {
+      const isVip = j.operator.toLowerCase().includes("vip") && !j.operator.toLowerCase().includes("executive");
+      const isExecutive = j.operator.toLowerCase().includes("executive") || j.operator.toLowerCase().includes("exclusive");
+      const isClassic = j.operator.toLowerCase().includes("classique");
+      
+      const matchesVip = selectedClasses.includes("vip") && isVip;
+      const matchesExecutive = selectedClasses.includes("executive") && isExecutive;
+      const matchesClassic = selectedClasses.includes("classic") && isClassic;
+      
+      if (!matchesVip && !matchesExecutive && !matchesClassic) return false;
+    }
+
+    // 4. Time slot filter
+    if (selectedTimeSlots.length > 0) {
+      const hour = parseInt(j.depTime.split(":")[0], 10);
+      let slot = "";
+      if (hour >= 6 && hour < 12) slot = "morning";
+      else if (hour >= 12 && hour < 18) slot = "afternoon";
+      else if (hour >= 18 && hour < 24) slot = "evening";
+      else slot = "night";
+      
+      if (!selectedTimeSlots.includes(slot)) return false;
+    }
+
     return true;
   });
 
-  // Sorting
+  const toggleSort = (sort: string) => {
+    setActiveSorts(prev => {
+      if (prev.includes(sort)) return prev.filter(s => s !== sort);
+      if (prev.length >= 3) return [...prev.slice(1), sort]; // drop oldest when max reached
+      return [...prev, sort];
+    });
+  };
+
+  // Multi-sort: apply each active sort in priority order (index 0 = highest priority)
   const sortedJourneys = [...filteredJourneys].sort((a, b) => {
-    if (activeSort === "price") return a.price - b.price;
-    if (activeSort === "time") return a.depTime.localeCompare(b.depTime);
-    if (activeSort === "duration") return a.duration.localeCompare(b.duration);
+    for (const sort of activeSorts) {
+      let cmp = 0;
+      if (sort === "price") cmp = a.price - b.price;
+      else if (sort === "time") cmp = a.depTime.localeCompare(b.depTime);
+      else if (sort === "duration") cmp = a.duration.localeCompare(b.duration);
+      else if (sort === "vip") {
+        const isVipA = a.operator.toLowerCase().includes("vip") || a.operator.toLowerCase().includes("executive");
+        const isVipB = b.operator.toLowerCase().includes("vip") || b.operator.toLowerCase().includes("executive");
+        if (isVipA && !isVipB) cmp = -1;
+        else if (!isVipA && isVipB) cmp = 1;
+      }
+      else if (sort === "classic") {
+        const isClsA = a.operator.toLowerCase().includes("classique");
+        const isClsB = b.operator.toLowerCase().includes("classique");
+        if (isClsA && !isClsB) cmp = -1;
+        else if (!isClsA && isClsB) cmp = 1;
+      }
+      if (cmp !== 0) return cmp;
+    }
     return 0;
   });
 
@@ -395,15 +346,37 @@ export default function Reserver() {
             />
           </Link>
           <nav className={styles.nav}>
-            <Link href="/#reserver">Réserver</Link>
-            <Link href="/#agences">Agences</Link>
-            <Link href="/#tracabilite">Traçabilité</Link>
+            <Link href="/reserver">Réserver</Link>
+            <Link href="/agences">Agences</Link>
+            <Link href="/tracabilite">Traçabilité</Link>
+            <Link href="/location">Location</Link>
             {isAgencyLoggedIn && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
           </nav>
           <button onClick={toggleConnection} className={styles.headerBtn}>
             Connexion
           </button>
+          <button
+            className={styles.hamburgerBtn}
+            aria-label="Menu"
+            onClick={() => setMobileMenuOpen(o => !o)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:24,height:24}}>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
         </div>
+
+        {mobileMenuOpen && (
+          <div className={styles.mobileMenu}>
+            <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>Réserver</Link>
+            <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>Agences</Link>
+            <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>Traçabilité</Link>
+            <Link href="/location" onClick={() => setMobileMenuOpen(false)}>Location</Link>
+            {isAgencyLoggedIn && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>Admin</Link>}
+          </div>
+        )}
       </header>
 
       {/* Booking Layout Area */}
@@ -519,9 +492,22 @@ export default function Reserver() {
 
         {/* Content Layout Split Grid */}
         <div className={styles.resultsGrid}>
-          
+
+          {/* Filter toggle for mobile */}
+          <button
+            className={styles.filterToggleBtn}
+            onClick={() => setShowFilters(f => !f)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:16,height:16}}>
+              <line x1="4" y1="6" x2="20" y2="6"/>
+              <line x1="8" y1="12" x2="16" y2="12"/>
+              <line x1="11" y1="18" x2="13" y2="18"/>
+            </svg>
+            {showFilters ? "Masquer les filtres" : "Afficher les filtres"}
+          </button>
+
           {/* Left Column: Map & Sorting Filters */}
-          <aside className={styles.sidebarCol}>
+          <aside className={showFilters ? `${styles.sidebarCol} ${styles.sidebarColVisible}` : styles.sidebarCol}>
             {/* Interactive Map Card */}
             <div className={styles.mapCard}>
               <div className={styles.mapVisualOverlay}>
@@ -549,46 +535,172 @@ export default function Reserver() {
             <div className={styles.filterCard}>
               <div className={styles.filterHeaderRow}>
                 <h3>Trier par</h3>
-                <button className={styles.clearBtn} onClick={() => setActiveSort("price")}>Tout effacer</button>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {activeSorts.length > 0 && (
+                    <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#00673C", background: "#eef8f3", padding: "2px 7px", borderRadius: 99 }}>
+                      {activeSorts.length}/3
+                    </span>
+                  )}
+                  <button className={styles.clearBtn} onClick={() => setActiveSorts([])}>Tout effacer</button>
+                </div>
               </div>
+              <p style={{ fontSize: "0.7rem", color: "#a0aec0", margin: "0 0 10px 0", fontWeight: 600 }}>
+                Activez jusqu&apos;à 3 tris simultanément — le premier a la priorité
+              </p>
 
               <div className={styles.filterOptionsList}>
-                <div 
-                  className={`${styles.filterItem} ${activeSort === "time" ? styles.filterItemActive : ""}`}
-                  onClick={() => setActiveSort("time")}
-                >
-                  <span className={styles.radioDot}></span>
-                  <span className={styles.filterLabel}>Départ le plus tôt</span>
-                  <svg className={styles.filterIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                  </svg>
-                </div>
+                {[
+                  { key: "time", label: "Départ le plus tôt", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  )},
+                  { key: "price", label: "Prix le plus bas", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                  )},
+                  { key: "duration", label: "Trajet le plus court", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                  )},
+                ].map(({ key, label, icon }) => {
+                  const isActive = activeSorts.includes(key);
+                  const priority = activeSorts.indexOf(key) + 1;
+                  return (
+                    <div
+                      key={key}
+                      className={`${styles.filterItem} ${isActive ? styles.filterItemActive : ""}`}
+                      onClick={() => toggleSort(key)}
+                      style={{ position: "relative" }}
+                    >
+                      <span className={styles.radioDot} style={isActive ? { background: "#00673C", borderColor: "#00673C" } : {}}></span>
+                      <span className={styles.filterLabel}>{label}</span>
+                      {isActive && (
+                        <span style={{ fontSize: "0.6rem", fontWeight: 900, background: "#00673C", color: "#fff", borderRadius: "50%", width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", marginLeft: "auto", flexShrink: 0 }}>
+                          {priority}
+                        </span>
+                      )}
+                      {icon}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
-                <div 
-                  className={`${styles.filterItem} ${activeSort === "price" ? styles.filterItemActive : ""}`}
-                  onClick={() => setActiveSort("price")}
+            {/* Classe de voyage Panel */}
+            <div className={styles.filterCard} style={{ marginTop: '10px' }}>
+              <div className={styles.filterHeaderRow}>
+                <h3>Classe de voyage</h3>
+                <button 
+                  className={styles.clearBtn} 
+                  onClick={() => setSelectedClasses([])}
+                  style={{ opacity: selectedClasses.length > 0 ? 1 : 0, pointerEvents: selectedClasses.length > 0 ? 'auto' : 'none' }}
                 >
-                  <span className={styles.radioDot}></span>
-                  <span className={styles.filterLabel}>Prix le plus bas</span>
-                  <svg className={styles.filterIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-                    <line x1="12" y1="4" x2="12" y2="20"></line>
-                    <line x1="2" y1="10" x2="22" y2="10"></line>
-                  </svg>
-                </div>
+                  Tout effacer
+                </button>
+              </div>
+              <div className={styles.amenitiesList}>
+                {[
+                  { key: "vip", label: "Classe VIP", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z"/><path d="M5 20h14"/></svg>
+                  )},
+                  { key: "executive", label: "Executive Class", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><polygon points="12 2 22 12 12 22 2 12 12 2"/></svg>
+                  )},
+                  { key: "classic", label: "Classe Classique", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 12l2 2 4-4"/></svg>
+                  )}
+                ].map((cls) => {
+                  const isChecked = selectedClasses.includes(cls.key);
+                  return (
+                    <label 
+                      key={cls.key} 
+                      className={`${styles.amenityItem} ${isChecked ? styles.amenityItemActive : ""}`}
+                    >
+                      <input 
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setSelectedClasses(prev => prev.filter(k => k !== cls.key));
+                          } else {
+                            setSelectedClasses(prev => [...prev, cls.key]);
+                          }
+                        }}
+                        className={styles.hiddenCheckbox}
+                      />
+                      <span className={styles.customCheckbox}>
+                        {isChecked && (
+                          <svg className={styles.checkMarkIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className={styles.amenityLabel}>{cls.label}</span>
+                      <span className={styles.amenityIconWrapper}>
+                        {cls.icon}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-                <div 
-                  className={`${styles.filterItem} ${activeSort === "duration" ? styles.filterItemActive : ""}`}
-                  onClick={() => setActiveSort("duration")}
+            {/* Horaires de départ Panel */}
+            <div className={styles.filterCard} style={{ marginTop: '10px' }}>
+              <div className={styles.filterHeaderRow}>
+                <h3>Horaires de départ</h3>
+                <button 
+                  className={styles.clearBtn} 
+                  onClick={() => setSelectedTimeSlots([])}
+                  style={{ opacity: selectedTimeSlots.length > 0 ? 1 : 0, pointerEvents: selectedTimeSlots.length > 0 ? 'auto' : 'none' }}
                 >
-                  <span className={styles.radioDot}></span>
-                  <span className={styles.filterLabel}>Trajet le plus court</span>
-                  <svg className={styles.filterIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 14 14"></polyline>
-                  </svg>
-                </div>
+                  Tout effacer
+                </button>
+              </div>
+              <div className={styles.amenitiesList}>
+                {[
+                  { key: "morning", label: "Matin (06:00 - 12:00)", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><path d="M12 2v2M4.93 4.93l1.41 1.41M2 12h2M6.34 17.66l-1.41 1.41M12 20v2M17.66 17.66l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/></svg>
+                  )},
+                  { key: "afternoon", label: "Après-midi (12:00 - 18:00)", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  )},
+                  { key: "evening", label: "Soir (18:00 - 00:00)", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><path d="M12 3a9 9 0 1 0 9 9 9.75 9.75 0 0 0-6.74-9.47M22 3l-5 5M22 3v5M22 3h-5"/></svg>
+                  )},
+                  { key: "night", label: "Nuit (00:00 - 06:00)", icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={styles.filterIcon}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                  )}
+                ].map((slot) => {
+                  const isChecked = selectedTimeSlots.includes(slot.key);
+                  return (
+                    <label 
+                      key={slot.key} 
+                      className={`${styles.amenityItem} ${isChecked ? styles.amenityItemActive : ""}`}
+                    >
+                      <input 
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setSelectedTimeSlots(prev => prev.filter(k => k !== slot.key));
+                          } else {
+                            setSelectedTimeSlots(prev => [...prev, slot.key]);
+                          }
+                        }}
+                        className={styles.hiddenCheckbox}
+                      />
+                      <span className={styles.customCheckbox}>
+                        {isChecked && (
+                          <svg className={styles.checkMarkIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </span>
+                      <span className={styles.amenityLabel}>{slot.label}</span>
+                      <span className={styles.amenityIconWrapper}>
+                        {slot.icon}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -608,7 +720,7 @@ export default function Reserver() {
               <div className={styles.amenitiesList}>
                 {amenitiesList.map((amenity) => {
                   const isChecked = selectedAmenities.includes(amenity.key);
-                  const count = journeys.filter(j => j.amenityKeys?.includes(amenity.key)).length;
+                  const count = journeysState.filter(j => j.amenityKeys?.includes(amenity.key)).length;
 
                   return (
                     <label 
@@ -648,7 +760,13 @@ export default function Reserver() {
 
           {/* Right Column: Dynamic Ticket Listings */}
           <section className={styles.ticketsCol}>
-            {journeysState.length === 0 ? (
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: 0, padding: '64px 32px', background: '#ffffff', borderRadius: '20px', border: '1px solid rgba(0, 0, 0, 0.03)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.02)' }}>
+                <div style={{ width: '48px', height: '48px', border: '4px solid rgba(0, 103, 60, 0.1)', borderTop: '4px solid #00673C', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary-navy)', marginTop: '20px', marginBottom: '8px' }}>Récupération des trajets</h3>
+                <p style={{ color: 'var(--text-gray)', fontSize: '0.9rem', lineHeight: 1.5, maxWidth: '420px', margin: '0 auto', textAlign: 'center' }}>Connexion en cours avec votre base de données Supabase...</p>
+              </div>
+            ) : journeysState.length === 0 ? (
               <div className={styles.noResults} style={{ margin: 0, padding: '48px 32px', background: '#ffffff', borderRadius: '20px', border: '1px solid rgba(0, 0, 0, 0.03)', boxShadow: '0 10px 30px rgba(0, 0, 0, 0.02)' }}>
                 <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>🚌</div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary-navy)', marginBottom: '8px' }}>Aucun voyage programmé</h3>
@@ -778,7 +896,13 @@ export default function Reserver() {
                           </div>
 
                           {/* Action Button */}
-                          <button className={styles.bookBtn}>
+                          <button
+                            className={styles.bookBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJourney(j.id);
+                            }}
+                          >
                             Réserver
                           </button>
                         </div>

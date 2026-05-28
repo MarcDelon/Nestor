@@ -3,6 +3,9 @@
 -- ====================================================================
 
 -- DROP EXISTING TABLES IN DEPENDENCY ORDER TO AVOID VIOLATIONS
+DROP TABLE IF EXISTS service_requests CASCADE;
+DROP TABLE IF EXISTS vouchers CASCADE;
+DROP TABLE IF EXISTS loyalty_points CASCADE;
 DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS colis CASCADE;
 DROP TABLE IF EXISTS passengers CASCADE;
@@ -107,6 +110,7 @@ ALTER TABLE buses DISABLE ROW LEVEL SECURITY;
 CREATE TABLE IF NOT EXISTS journeys (
   id SERIAL PRIMARY KEY,
   agency_id INTEGER REFERENCES agencies(id) ON DELETE CASCADE,
+  bus_id TEXT REFERENCES buses(id) ON DELETE SET NULL,
   operator TEXT NOT NULL,
   logo TEXT NOT NULL DEFAULT '/images/default_agency.png',
   dep_time TEXT NOT NULL,
@@ -195,12 +199,73 @@ CREATE TABLE IF NOT EXISTS messages (
   sender TEXT NOT NULL CHECK (sender IN ('agency', 'contact')),
   text TEXT NOT NULL,
   time TEXT NOT NULL,
+  is_read BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 
 -- ====================================================================
--- ============================================================-- ====================================================================
+-- 10. SERVICE REQUESTS TABLE (Demandes clients via formulaire / Smartsupp)
+-- ====================================================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_type') THEN
+        CREATE TYPE request_type AS ENUM ('livraison', 'envoi_colis', 'demande_speciale', 'autre');
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_status') THEN
+        CREATE TYPE request_status AS ENUM ('nouveau', 'en_cours', 'traite', 'annule');
+    END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS service_requests (
+  id SERIAL PRIMARY KEY,
+  agency_id INTEGER REFERENCES agencies(id) ON DELETE SET NULL,
+  request_type request_type NOT NULL DEFAULT 'autre',
+  client_name TEXT NOT NULL,
+  client_email TEXT,
+  client_phone TEXT NOT NULL,
+  description TEXT NOT NULL,
+  preferred_date TEXT,
+  origin_city TEXT,
+  destination_city TEXT,
+  status request_status NOT NULL DEFAULT 'nouveau',
+  smartsupp_session_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE service_requests DISABLE ROW LEVEL SECURITY;
+
+-- ====================================================================
+-- 11. VOUCHERS TABLE (Bons de réduction créés par l'admin)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS vouchers (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  percentage INTEGER NOT NULL CHECK (percentage > 0 AND percentage <= 100),
+  max_uses INTEGER NOT NULL DEFAULT 100,
+  current_uses INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE vouchers DISABLE ROW LEVEL SECURITY;
+
+-- ====================================================================
+-- 12. LOYALTY POINTS TABLE (Points fidélité par client)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS loyalty_points (
+  client_id UUID PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  points INTEGER NOT NULL DEFAULT 0,
+  total_earned INTEGER NOT NULL DEFAULT 0,
+  tier TEXT NOT NULL DEFAULT 'Bronze' CHECK (tier IN ('Bronze', 'Silver', 'Gold')),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE loyalty_points DISABLE ROW LEVEL SECURITY;
+
+-- ====================================================================
 -- SEED DATA NOTE
 -- ====================================================================
 -- Database seeding is handled programmatically via the backend seeding script.

@@ -19,35 +19,32 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function seedDatabase() {
-  console.log('🚀 Début du seed de la base de données SafeTrip (Schéma Unifié)...\n');
+  console.log('🚀 Début du seed de la base de données SafeTrip (Cohérent & Diversifié)...\n');
 
   // Hachage des mots de passe
   const salt = bcrypt.genSaltSync(10);
   const adminPassHash = bcrypt.hashSync('admin123', salt);
-  const clientPassHash = bcrypt.hashSync('client123', salt);
   const agencyPassHash = bcrypt.hashSync('123456', salt); // Default for all seed agencies
 
   // Clean old tables in correct dependency order
   console.log('🧹 Nettoyage des anciennes tables...');
-  await supabase.from('messages').delete().gte('id', 0);
+  await supabase.from('messages').delete().neq('id', -1);
   await supabase.from('colis').delete().neq('id', 'dummy');
-  await supabase.from('passengers').delete().gte('id', 0);
-  await supabase.from('journeys').delete().gte('id', 0);
+  await supabase.from('passengers').delete().neq('id', -1);
+  await supabase.from('journeys').delete().neq('id', -1);
   await supabase.from('buses').delete().neq('id', 'dummy');
   await supabase.from('admins').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabase.from('clients').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  await supabase.from('agencies').delete().gte('id', 0);
+  await supabase.from('agencies').delete().neq('id', -1);
   await supabase.from('users').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   console.log('  ✅ Nettoyage terminé.');
 
   // ============================================================
-  // 1. SEED USERS (Central Table)
+  // 1. SEED USERS (Minimal for Agencies & Admin only - NO Client users added)
   // ============================================================
-  console.log('👤 Insertion des utilisateurs dans la table centralisée (users)...');
+  console.log('👤 Insertion des utilisateurs techniques indispensables (users)...');
   
-  // UUIDs statiques pour conserver les liens de manière reproductible
   const adminUuid = 'a1e1d1ad-2026-4444-8888-000000000001';
-  const clientUuid = 'c1c1c1c1-2026-4444-8888-000000000001';
   const finexsUserUuid = 'f1f1f1f1-2026-4444-8888-000000000001';
   const bucaUserUuid = 'b1b1b1b1-2026-4444-8888-000000000001';
   const generalUserUuid = 'e1e1e1e1-2026-4444-8888-000000000001';
@@ -56,7 +53,6 @@ async function seedDatabase() {
 
   const { error: userErr } = await supabase.from('users').insert([
     { id: adminUuid, email: 'admin@safetrip.cm', password_hash: adminPassHash, role: 'admin' },
-    { id: clientUuid, email: 'client@safetrip.cm', password_hash: clientPassHash, role: 'client' },
     { id: finexsUserUuid, email: 'finexs@safetrip.cm', password_hash: agencyPassHash, role: 'agency' },
     { id: bucaUserUuid, email: 'buca@safetrip.cm', password_hash: agencyPassHash, role: 'agency' },
     { id: generalUserUuid, email: 'general@safetrip.cm', password_hash: agencyPassHash, role: 'agency' },
@@ -70,25 +66,14 @@ async function seedDatabase() {
   }
   console.log('  ✅ Table users insérée.');
 
-  // ============================================================
-  // 2. SEED ADMINS & CLIENTS
-  // ============================================================
-  console.log('👑 Insertion de l\'administrateur et du client...');
-  
+  // Seed Admin profile
   const { error: adminErr } = await supabase.from('admins').insert([
     { id: adminUuid, full_name: 'Administrateur Principal' }
   ]);
   if (adminErr) console.error('  ❌ Erreur admins:', adminErr.message);
-
-  const { error: clientErr } = await supabase.from('clients').insert([
-    { id: clientUuid, full_name: 'Jean Client', phone: '+237 600 00 00 00' }
-  ]);
-  if (clientErr) console.error('  ❌ Erreur clients:', clientErr.message);
   
-  console.log('  ✅ Admins & Clients insérés.');
-
   // ============================================================
-  // 3. AGENCIES
+  // 2. AGENCIES
   // ============================================================
   console.log('🏢 Insertion des agences...');
   const { error: agErr } = await supabase.from('agencies').insert([
@@ -98,168 +83,314 @@ async function seedDatabase() {
     { id: 4, user_id: touristiqueUserUuid, name: 'Touristique Express', logo: '/images/Touristique.png', certification: 'Partenaire National', phone: '+237 691 60 60 60', address: 'Douala - Akwa, Cameroun', description: 'Leader du transport VIP touristique au Cameroun. Destinations : Kribi, Limbé, Bamenda.' },
     { id: 5, user_id: menUserUuid, name: 'Men Travel', logo: '/images/mentravel.png', certification: 'Partenaire Premium', phone: '+237 670 50 50 50', address: 'Douala - Carrefour Akwa, Cameroun', description: 'Transport Executive Class haut de gamme avec restauration à bord et confort incomparable.' }
   ]);
-  if (agErr) console.error('  ❌ Erreur agencies:', agErr.message);
-  else console.log('  ✅ Agencies insérées');
+
+  if (agErr) {
+    console.error('  ❌ Erreur agencies:', agErr.message);
+    process.exit(1);
+  }
+  console.log('  ✅ Agencies insérées.');
 
   // ============================================================
-  // 4. BUSES (16 par agence : 8 VIP + 8 Classique)
+  // 3. BUSES & JOURNEYS GENERATION
   // ============================================================
-  console.log('🚌 Insertion des bus (16 par agence : 8 VIP + 8 Classique)...');
+  console.log('🚌 Génération des bus et des trajets...');
 
   const agencyConfigs = [
-    { id: 1, platePrefix: 'LT', depStation: 'Douala - Agence Finexs Douala', arrStation: 'Yaoundé - Agence Finexs Mvan', name: 'Finexs Voyage', logo: '/images/finexs.png' },
-    { id: 2, platePrefix: 'CE', depStation: 'Douala - Agence Buca Bessengue', arrStation: 'Yaoundé - Agence Buca Mvan', name: 'Buca Voyage', logo: '/images/bucavoyage.png' },
-    { id: 3, platePrefix: 'LT', depStation: 'Douala - Bessengue', arrStation: 'Yaoundé - Mvan', name: 'General Express', logo: '/images/General.png' },
-    { id: 4, platePrefix: 'AD', depStation: 'Douala - Agence Touristique Akwa', arrStation: 'Yaoundé - Agence Touristique Mvan', name: 'Touristique Express', logo: '/images/Touristique.png' },
-    { id: 5, platePrefix: 'LT', depStation: 'Douala - Carrefour Akwa', arrStation: 'Yaoundé - Mvan', name: 'Men Travel', logo: '/images/mentravel.png' }
+    { id: 1, name: 'Finexs Voyage', logo: '/images/finexs.png', platePrefix: 'LT', isShiftedTime: true, depStation: 'Douala - Agence Finexs Douala', arrStation: 'Yaoundé - Agence Finexs Mvan' },
+    { id: 2, name: 'Buca Voyage', logo: '/images/bucavoyage.png', platePrefix: 'CE', isShiftedTime: false, depStation: 'Douala - Agence Buca Bessengue', arrStation: 'Yaoundé - Agence Buca Mvan' },
+    { id: 3, name: 'General Express', logo: '/images/General.png', platePrefix: 'LT', isShiftedTime: false, depStation: 'Douala - Bessengue', arrStation: 'Yaoundé - Mvan' },
+    { id: 4, name: 'Touristique Express', logo: '/images/Touristique.png', platePrefix: 'AD', isShiftedTime: false, depStation: 'Douala - Agence Touristique Akwa', arrStation: 'Yaoundé - Agence Touristique Mvan' },
+    { id: 5, name: 'Men Travel', logo: '/images/mentravel.png', platePrefix: 'LT', isShiftedTime: true, depStation: 'Douala - Carrefour Akwa', arrStation: 'Yaoundé - Mvan' }
   ];
 
-  // 8 créneaux horaires fixes pour chaque classe (VIP et Classique)
-  const schedules = [
-    { dep: '06:00', arr: '10:15', isNight: false },
-    { dep: '09:00', arr: '13:15', isNight: false },
-    { dep: '12:00', arr: '16:15', isNight: false },
-    { dep: '15:00', arr: '19:15', isNight: false },
-    { dep: '18:00', arr: '22:15', isNight: false },
-    { dep: '21:00', arr: '01:15', isNight: true },
-    { dep: '00:00', arr: '04:15', isNight: true },
-    { dep: '03:00', arr: '07:15', isNight: true }
-  ];
+  const standardHours = ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00', '00:00', '03:00'];
+  const shiftedHours = ['06:30', '09:30', '12:30', '15:30', '18:30', '21:30', '00:30', '03:30'];
 
-  const plateLetters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const allBuses: any[] = [];
   const allJourneys: any[] = [];
   let journeyId = 1;
 
   for (const agency of agencyConfigs) {
-    // --- 8 bus VIP ---
+    const hours = agency.isShiftedTime ? shiftedHours : standardHours;
+
+    // A. 16 BUSES & JOURNEYS FOR THE TRANSITS (8 CLASSIC + 8 VIP)
+    // --- 8 VIP Buses & Journeys ---
     for (let i = 0; i < 8; i++) {
-      const plateNum = ((agency.id * 1000 + (i + 1) * 111) % 9000 + 1000);
-      const plateLetter = plateLetters[(agency.id * 7 + i * 3) % plateLetters.length];
+      const busId = `BUS-${agency.id}-VIP-${i+1}`;
+      const plaque = `${agency.platePrefix}-${1000 + agency.id*100 + i*10}-A`;
+      
+      // Diverse amenities for VIP
+      const amenities = ['ac', 'wifi', 'toilet', 'usb', 'tv', 'reclining'];
+      if (i % 2 === 0) amenities.push('catering'); // Catering on even VIP journeys
+      if (i % 3 === 0) amenities.push('leather'); // Premium leather seats on some VIP journeys
+
       allBuses.push({
-        id: `BUS-${agency.id}V${String(i + 1).padStart(2, '0')}`,
+        id: busId,
         agency_id: agency.id,
-        plaque: `${agency.platePrefix}-${plateNum}-${plateLetter}`,
-        bus_class: 'VIP',
-        capacity: 30,
-        occupied: Math.floor(15 + (agency.id * 3 + i * 5) % 14),
+        plaque,
+        bus_class: i % 4 === 0 ? 'Executive Class' : 'VIP',
+        capacity: i % 4 === 0 ? 20 : 30,
+        occupied: 0, // No seats populated
         status: i === 7 ? 'En maintenance' : (i % 3 === 1 ? 'En route' : 'Disponible'),
-        amenities: ['wifi', 'ac', 'toilet', 'plug'],
-        has_ac: true, has_toilet: true, has_wifi: true, has_catering: false
+        amenities,
+        has_ac: true,
+        has_toilet: true,
+        has_wifi: true,
+        has_catering: i % 2 === 0
       });
-      // Trajet VIP correspondant
-      const sched = schedules[i];
+
+      const depTime = hours[i];
+      const [hStr, mStr] = depTime.split(':');
+      const arrHour = (parseInt(hStr) + 4) % 24;
+      const arrMin = (parseInt(mStr) + 15) % 60;
+      const arrTime = `${String(arrHour).padStart(2, '0')}:${String(arrMin).padStart(2, '0')}`;
+      const isNight = parseInt(hStr) >= 21 || parseInt(hStr) < 5;
+
+      // Journey matching filters & frontend representation
+      const journeyAmenities = ['AC', 'Wi-Fi', 'Toilettes', 'Prises USB', 'Sièges VIP'];
+      if (i % 2 === 0) journeyAmenities.push('Restauration');
+      if (i % 4 === 0) journeyAmenities.push('Premium');
+
+      const journeyAmenityKeys = ['ac', 'wifi', 'toilet', 'plug', 'reclining', 'ebillet', 'instant'];
+      if (i % 2 === 0) journeyAmenityKeys.push('catering');
+
+      // Outbound Journey (Douala -> Yaoundé)
       allJourneys.push({
         id: journeyId++,
         agency_id: agency.id,
-        operator: `${agency.name} VIP`,
+        bus_id: busId,
+        operator: `${agency.name} ${i % 4 === 0 ? 'Executive Class' : 'VIP'}`,
         logo: agency.logo,
-        dep_time: sched.dep, arr_time: sched.arr, duration: '4h15',
-        dep_station: agency.depStation, arr_station: agency.arrStation,
-        price: 6000,
-        amenities: ['Wi-Fi', 'AC', 'Sièges VIP'],
-        amenity_keys: ['instant', 'reclining', 'plug', 'ac', 'ebillet', 'toilet', 'wifi'],
-        warning: null, is_night: sched.isNight
+        dep_time: depTime,
+        arr_time: arrTime,
+        duration: '4h15',
+        dep_station: agency.depStation,
+        arr_station: agency.arrStation,
+        price: i % 4 === 0 ? 8000 : 6000,
+        amenities: journeyAmenities,
+        amenity_keys: journeyAmenityKeys,
+        warning: null,
+        is_night: isNight
+      });
+
+      // Calculate return journey timings (departure Yaoundé = arrival Douala + 1h15 layover)
+      const retDepHour = (parseInt(hStr) + 5) % 24;
+      const retDepMin = (parseInt(mStr) + 30) % 60;
+      const retDepHourAdjusted = retDepMin < parseInt(mStr) ? (retDepHour + 1) % 24 : retDepHour;
+      const retDepTime = `${String(retDepHourAdjusted).padStart(2, '0')}:${String(retDepMin).padStart(2, '0')}`;
+
+      const retArrHour = (retDepHourAdjusted + 4) % 24;
+      const retArrMin = (retDepMin + 15) % 60;
+      const retArrHourAdjusted = retArrMin < retDepMin ? (retArrHour + 1) % 24 : retArrHour;
+      const retArrTime = `${String(retArrHourAdjusted).padStart(2, '0')}:${String(retArrMin).padStart(2, '0')}`;
+      const isNightRet = retDepHourAdjusted >= 21 || retDepHourAdjusted < 5;
+
+      // Return Journey (Yaoundé -> Douala)
+      allJourneys.push({
+        id: journeyId++,
+        agency_id: agency.id,
+        bus_id: busId,
+        operator: `${agency.name} ${i % 4 === 0 ? 'Executive Class' : 'VIP'}`,
+        logo: agency.logo,
+        dep_time: retDepTime,
+        arr_time: retArrTime,
+        duration: '4h15',
+        dep_station: agency.arrStation,
+        arr_station: agency.depStation,
+        price: i % 4 === 0 ? 8000 : 6000,
+        amenities: journeyAmenities,
+        amenity_keys: journeyAmenityKeys,
+        warning: null,
+        is_night: isNightRet
       });
     }
-    // --- 8 bus Classique ---
+
+    // --- 8 Classic Buses & Journeys ---
     for (let i = 0; i < 8; i++) {
-      const plateNum = ((agency.id * 1000 + (i + 9) * 137) % 9000 + 1000);
-      const plateLetter = plateLetters[(agency.id * 11 + i * 5) % plateLetters.length];
+      const busId = `BUS-${agency.id}-CLS-${i+1}`;
+      const plaque = `${agency.platePrefix}-${2000 + agency.id*100 + i*10}-B`;
+
+      // Diverse amenities for Classic (some with AC, some basic)
+      const hasAc = i % 4 !== 0; // 75% have AC
+      const amenities = ['luggage'];
+      if (hasAc) amenities.push('ac');
+      if (i % 3 === 0) amenities.push('usb'); // Some classics have USB
+
       allBuses.push({
-        id: `BUS-${agency.id}C${String(i + 1).padStart(2, '0')}`,
+        id: busId,
         agency_id: agency.id,
-        plaque: `${agency.platePrefix}-${plateNum}-${plateLetter}`,
+        plaque,
         bus_class: 'Classique',
         capacity: 70,
-        occupied: Math.floor(30 + (agency.id * 7 + i * 9) % 35),
+        occupied: 0, // No seats populated
         status: i === 6 ? 'En maintenance' : (i % 4 === 2 ? 'En route' : 'Disponible'),
-        amenities: ['ac'],
-        has_ac: true, has_toilet: false, has_wifi: false, has_catering: false
+        amenities,
+        has_ac: hasAc,
+        has_toilet: false,
+        has_wifi: false,
+        has_catering: false
       });
-      // Trajet Classique correspondant
-      const sched = schedules[i];
+
+      const depTime = hours[i];
+      const [hStr, mStr] = depTime.split(':');
+      const arrHour = (parseInt(hStr) + 4) % 24;
+      const arrMin = (parseInt(mStr) + 15) % 60;
+      const arrTime = `${String(arrHour).padStart(2, '0')}:${String(arrMin).padStart(2, '0')}`;
+      const isNight = parseInt(hStr) >= 21 || parseInt(hStr) < 5;
+
+      const journeyAmenities = ['Classique'];
+      if (hasAc) journeyAmenities.push('Climatisation');
+      const journeyAmenityKeys = ['ebillet', 'instant'];
+      if (hasAc) journeyAmenityKeys.push('ac');
+      if (i % 3 === 0) journeyAmenityKeys.push('plug');
+
+      // Outbound Journey (Douala -> Yaoundé)
       allJourneys.push({
         id: journeyId++,
         agency_id: agency.id,
+        bus_id: busId,
         operator: `${agency.name} Classique`,
         logo: agency.logo,
-        dep_time: sched.dep, arr_time: sched.arr, duration: '4h15',
-        dep_station: agency.depStation, arr_station: agency.arrStation,
+        dep_time: depTime,
+        arr_time: arrTime,
+        duration: '4h15',
+        dep_station: agency.depStation,
+        arr_station: agency.arrStation,
         price: 3000,
-        amenities: ['AC'],
-        amenity_keys: ['instant', 'ac', 'ebillet'],
-        warning: null, is_night: sched.isNight
+        amenities: journeyAmenities,
+        amenity_keys: journeyAmenityKeys,
+        warning: null,
+        is_night: isNight
+      });
+
+      // Calculate return journey timings (departure Yaoundé = arrival Douala + 1h15 layover)
+      const retDepHour = (parseInt(hStr) + 5) % 24;
+      const retDepMin = (parseInt(mStr) + 30) % 60;
+      const retDepHourAdjusted = retDepMin < parseInt(mStr) ? (retDepHour + 1) % 24 : retDepHour;
+      const retDepTime = `${String(retDepHourAdjusted).padStart(2, '0')}:${String(retDepMin).padStart(2, '0')}`;
+
+      const retArrHour = (retDepHourAdjusted + 4) % 24;
+      const retArrMin = (retDepMin + 15) % 60;
+      const retArrHourAdjusted = retArrMin < retDepMin ? (retArrHour + 1) % 24 : retArrHour;
+      const retArrTime = `${String(retArrHourAdjusted).padStart(2, '0')}:${String(retArrMin).padStart(2, '0')}`;
+      const isNightRet = retDepHourAdjusted >= 21 || retDepHourAdjusted < 5;
+
+      // Return Journey (Yaoundé -> Douala)
+      allJourneys.push({
+        id: journeyId++,
+        agency_id: agency.id,
+        bus_id: busId,
+        operator: `${agency.name} Classique`,
+        logo: agency.logo,
+        dep_time: retDepTime,
+        arr_time: retArrTime,
+        duration: '4h15',
+        dep_station: agency.arrStation,
+        arr_station: agency.depStation,
+        price: 3000,
+        amenities: journeyAmenities,
+        amenity_keys: journeyAmenityKeys,
+        warning: null,
+        is_night: isNightRet
       });
     }
+
+    // B. 5 DISTINCT BUSES FOR RENTAL / LOCATION (Diverse categories, sizes, and options)
+    // --- 5 Location Buses ---
+    
+    // Bus 1: Minibus (12 places) - Classique mapping to minibus
+    allBuses.push({
+      id: `BUS-${agency.id}-LOC-MINI`,
+      agency_id: agency.id,
+      plaque: `${agency.platePrefix}-${3000 + agency.id*100}-L`,
+      bus_class: 'Classique', // mapped to minibus in frontend
+      capacity: 12,
+      occupied: 0,
+      status: 'Disponible',
+      amenities: ['ac', 'gps', 'usb', 'luggage'],
+      has_ac: true,
+      has_toilet: false,
+      has_wifi: false,
+      has_catering: false
+    });
+
+    // Bus 2: Confort Bus (30 places) - Confort class
+    allBuses.push({
+      id: `BUS-${agency.id}-LOC-CONF`,
+      agency_id: agency.id,
+      plaque: `${agency.platePrefix}-${3100 + agency.id*100}-L`,
+      bus_class: 'Confort',
+      capacity: 30,
+      occupied: 0,
+      status: 'Disponible',
+      amenities: ['ac', 'wifi', 'tv', 'usb', 'gps', 'reclining', 'luggage', 'sono'],
+      has_ac: true,
+      has_toilet: false,
+      has_wifi: true,
+      has_catering: false
+    });
+
+    // Bus 3: VIP Luxury Bus (18 places) - VIP class
+    allBuses.push({
+      id: `BUS-${agency.id}-LOC-VIP`,
+      agency_id: agency.id,
+      plaque: `${agency.platePrefix}-${3200 + agency.id*100}-L`,
+      bus_class: 'VIP',
+      capacity: 18,
+      occupied: 0,
+      status: 'Disponible',
+      amenities: ['ac', 'wifi', 'toilet', 'tv', 'usb', 'mini_bar', 'leather', 'gps', 'reclining', 'luggage', 'catering'],
+      has_ac: true,
+      has_toilet: true,
+      has_wifi: true,
+      has_catering: true
+    });
+
+    // Bus 4: Large Capacity Bus (80 places) - Classique class (maps to Grande capacity in capacity filter)
+    allBuses.push({
+      id: `BUS-${agency.id}-LOC-GRND`,
+      agency_id: agency.id,
+      plaque: `${agency.platePrefix}-${3300 + agency.id*100}-L`,
+      bus_class: 'Classique',
+      capacity: 80,
+      occupied: 0,
+      status: 'Disponible',
+      amenities: ['ac', 'tv', 'luggage', 'sono', 'gps'],
+      has_ac: true,
+      has_toilet: false,
+      has_wifi: false,
+      has_catering: false
+    });
+
+    // Bus 5: Ceremonial / Marriage VIP Bus (35 places) - VIP / Executive Class
+    allBuses.push({
+      id: `BUS-${agency.id}-LOC-MARIAGE`,
+      agency_id: agency.id,
+      plaque: `${agency.platePrefix}-${3400 + agency.id*100}-L`,
+      bus_class: 'Executive Class',
+      capacity: 35,
+      occupied: 0,
+      status: 'Disponible',
+      amenities: ['ac', 'wifi', 'tv', 'mini_bar', 'deco', 'sono', 'leather', 'catering', 'guide'],
+      has_ac: true,
+      has_toilet: true,
+      has_wifi: true,
+      has_catering: true
+    });
   }
 
-  // Insertion de tous les bus
+  // Insert all buses
   const { error: busErr } = await supabase.from('buses').insert(allBuses);
   if (busErr) console.error('  ❌ Erreur buses:', busErr.message);
-  else console.log(`  ✅ ${allBuses.length} buses insérées (${agencyConfigs.length} agences × 16 bus)`);
+  else console.log(`  ✅ ${allBuses.length} bus insérés (${agencyConfigs.length} agences × (16 trajets + 5 locations))`);
 
-  // ============================================================
-  // 5. JOURNEYS (16 par agence : 8 VIP + 8 Classique)
-  // ============================================================
-  console.log('🗺️ Insertion des trajets (horaires : 6h, 9h, 12h, 15h, 18h, 21h, 0h, 3h)...');
+  // Insert all journeys
   const { error: jErr } = await supabase.from('journeys').insert(allJourneys);
   if (jErr) console.error('  ❌ Erreur journeys:', jErr.message);
   else console.log(`  ✅ ${allJourneys.length} trajets insérés (${agencyConfigs.length} agences × 16 horaires)`);
 
-  // ============================================================
-  // 6. PASSENGERS (lié en partie à notre compte client d'essai)
-  // ============================================================
-  console.log('👤 Insertion des passagers...');
-  const passengersData = [
-    // Journey 1
-    { journey_id: 1, client_id: clientUuid, name: 'Jean Client', phone: '+237 600 00 00 00', seat: '1A (VIP)', status: 'Enregistré', luggage_count: 2, luggage_scanned: true },
-    { journey_id: 1, name: 'Syntyche Toukam', phone: '+237 677 44 55 66', seat: '2B (VIP)', status: 'Payé', luggage_count: 1, luggage_scanned: false },
-    { journey_id: 1, name: 'Jean-Pierre Talla', phone: '+237 655 77 88 99', seat: '4C', status: 'Payé', luggage_count: 3, luggage_scanned: true },
-    { journey_id: 1, name: 'Carine Bella', phone: '+237 691 12 34 56', seat: '5D', status: 'En attente', luggage_count: 0, luggage_scanned: false },
-    { journey_id: 1, name: 'Patrick Fotso', phone: '+237 670 98 76 54', seat: '8A', status: 'Payé', luggage_count: 2, luggage_scanned: false },
-    // Journey 2
-    { journey_id: 2, name: 'Syntyche Toukam', phone: '+237 677 44 55 66', seat: '2B (VIP)', status: 'Payé', luggage_count: 1, luggage_scanned: false },
-    { journey_id: 2, name: 'Jean-Pierre Talla', phone: '+237 655 77 88 99', seat: '4C', status: 'Payé', luggage_count: 3, luggage_scanned: true },
-    { journey_id: 2, name: 'Carine Bella', phone: '+237 691 12 34 56', seat: '5D', status: 'En attente', luggage_count: 0, luggage_scanned: false },
-    { journey_id: 2, name: 'Patrick Fotso', phone: '+237 670 98 76 54', seat: '8A', status: 'Payé', luggage_count: 2, luggage_scanned: false },
-    { journey_id: 2, name: 'Sandra Kamdem', phone: '+237 650 11 22 33', seat: '9B', status: 'Enregistré', luggage_count: 1, luggage_scanned: true },
-    { journey_id: 2, name: 'Aboubakar Siddiki', phone: '+237 699 77 66 55', seat: '12C', status: 'Payé', luggage_count: 2, luggage_scanned: false }
-  ];
-
-  const { error: pErr } = await supabase.from('passengers').insert(passengersData);
-  if (pErr) console.error('  ❌ Erreur passengers:', pErr.message);
-  else console.log('  ✅ Passagers insérés');
-
-  // ============================================================
-  // 7. COLIS
-  // ============================================================
-  console.log('📦 Insertion des colis avec émetteurs et récepteurs...');
-  const { error: cErr } = await supabase.from('colis').insert([
-    { id: 'BAG-2026-FX58-A', agency_id: 1, client_id: clientUuid, label: 'Sac de Voyage principal', type: 'Sac', weight: 15, color: 'Noir', status: 'À bord du bus', trip: 'Douala → Yaoundé', trip_date: '25 Mai 2026 · 06:15', qr_ref: 'QR-FX58-A', fragile: false, sender_name: 'Jean Client', sender_phone: '+237 600 00 00 00', receiver_name: 'Marie Talla', receiver_phone: '+237 677 11 22 33' },
-    { id: 'BAG-2026-FX58-B', agency_id: 1, client_id: clientUuid, label: 'Carton scellé (Alimentation)', type: 'Carton', weight: 8, color: 'Brun', status: 'Scanné en gare', trip: 'Douala → Yaoundé', trip_date: '25 Mai 2026 · 06:15', qr_ref: 'QR-FX58-B', fragile: true, sender_name: 'Jean Client', sender_phone: '+237 600 00 00 00', receiver_name: 'Franck Bella', receiver_phone: '+237 699 44 55 66' },
-    { id: 'BAG-2026-BV33-A', agency_id: 2, label: 'Valise cabine', type: 'Valise', weight: 12, color: 'Bordeaux', status: 'Livré', trip: 'Yaoundé → Bafoussam', trip_date: '18 Avril 2026 · 08:00', qr_ref: 'QR-BV33-A', fragile: false, sender_name: 'Paul Kamdem', sender_phone: '+237 650 11 22 33', receiver_name: 'Alice Bella', receiver_phone: '+237 691 12 34 56' },
-    { id: 'BAG-2026-GE21-A', agency_id: 3, label: 'Sac à dos randonnée', type: 'Sac à dos', weight: 5, color: 'Bleu', status: 'En attente de scan', trip: 'Douala → Yaoundé', trip_date: '25 Mai 2026 · 18:30', qr_ref: 'QR-GE21-A', fragile: false, sender_name: 'Steve Fotso', sender_phone: '+237 670 98 76 54', receiver_name: 'Jean Client', receiver_phone: '+237 600 00 00 00' }
-  ]);
-  if (cErr) console.error('  ❌ Erreur colis:', cErr.message);
-  else console.log('  ✅ Colis insérés');
-
-  // ============================================================
-  // 8. MESSAGES
-  // ============================================================
-  console.log('💬 Insertion des messages...');
-  const { error: mErr } = await supabase.from('messages').insert([
-    { agency_id: 1, thread_id: 'support', sender: 'contact', text: "Bonjour, l'équipe d'assistance SafeTrip est disponible. Comment pouvons-nous vous aider aujourd'hui ?", time: '09:15' },
-    { agency_id: 1, thread_id: 'support', sender: 'agency', text: 'Bonjour, nous aimerions certifier une nouvelle ligne de bus Douala-Kribi.', time: '09:30' },
-    { agency_id: 1, thread_id: 'support', sender: 'contact', text: "Parfait ! Veuillez nous transmettre la plaque d'immatriculation et l'agrément ministériel du bus dans l'onglet Profil.", time: '09:32' },
-    { agency_id: 1, thread_id: 'jean-client', sender: 'contact', text: 'Bonjour Finexs, mon colis de référence BAG-2026-FX58-A est bien enregistré à bord ?', time: '11:05' },
-    { agency_id: 1, thread_id: 'jean-client', sender: 'agency', text: 'Bonjour Jean, oui ! Votre sac de voyage noir de 15 kg a été scanné avec succès et est à bord.', time: '11:20' }
-  ]);
-  if (mErr) console.error('  ❌ Erreur messages:', mErr.message);
-  else console.log('  ✅ Messages insérés');
-
   console.log('\n====================================================');
-  console.log('✅ SEED TERMINÉ AVEC SUCCÈS ! (Schéma Centralisé)');
+  console.log('✅ SEED COMPLET, DIVERSIFIÉ ET COHÉRENT TERMINÉ !');
   console.log('====================================================');
 }
 

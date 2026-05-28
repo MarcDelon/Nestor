@@ -27,3 +27,24 @@ INSERT INTO agencies (id, user_id, name, logo, photo, certification, phone, addr
   (3, 'e1e1e1e1-2026-4444-8888-000000000001', 'General Express', '/images/General.png', '/images/General.png', 'Partenaire Certifié', '+237 655 70 70 70', 'Douala - Bessengue, Cameroun', 'Transport interurbain accessible et fiable pour tous les camerounais.'),
   (4, 'd1d1d1d1-2026-4444-8888-000000000001', 'Touristique Express', '/images/Touristique.png', '/images/Touristique.png', 'Partenaire National', '+237 691 60 60 60', 'Douala - Akwa, Cameroun', 'Leader du transport VIP touristique au Cameroun. Destinations : Kribi, Limbé, Bamenda.'),
   (5, 'a2a2a2a2-2026-4444-8888-000000000001', 'Men Travel', '/images/mentravel.png', '/images/mentravel.png', 'Partenaire Premium', '+237 670 50 50 50', 'Douala - Carrefour Akwa, Cameroun', 'Transport Executive Class haut de gamme avec restauration à bord et confort incomparable.');
+
+-- ====================================================================
+-- SEED : VOUCHERS (bons de réduction admin exemples)
+-- ====================================================================
+DELETE FROM vouchers WHERE code IN ('BIENVENUE10', 'NOEL25', 'FIDELITE15');
+INSERT INTO vouchers (code, percentage, max_uses, current_uses, status) VALUES
+  ('BIENVENUE10', 10, 500, 0, 'published'),
+  ('NOEL25',      25,  50, 0, 'published'),
+  ('FIDELITE15',  15, 200, 0, 'draft');
+
+-- ====================================================================
+-- SEED : DEMANDES DE SERVICE EXEMPLE
+-- ====================================================================
+DELETE FROM service_requests WHERE client_phone IN ('+237 699 11 22 33', '+237 677 44 55 66');
+INSERT INTO service_requests (agency_id, request_type, client_name, client_email, client_phone, description, preferred_date, origin_city, destination_city, status) VALUES
+  (1, 'envoi_colis', 'Alice Mbarga', 'alice@example.cm', '+237 699 11 22 33',
+   'J''ai un colis fragile (électronique) à envoyer de Douala à Yaoundé sans me déplacer. Besoin d''une collecte à domicile.',
+   '2026-06-15', 'Douala', 'Yaoundé', 'nouveau'),
+  (3, 'livraison', 'Bernard Talla', null, '+237 677 44 55 66',
+   'Demande de livraison de documents urgents depuis Bafoussam vers Douala. Je ne peux pas me déplacer cette semaine.',
+   '2026-06-10', 'Bafoussam', 'Douala', 'en_cours');

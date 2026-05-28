@@ -157,6 +157,7 @@ const sqlStatements: string[] = [
     sender TEXT NOT NULL CHECK (sender IN ('agency', 'contact')),
     text TEXT NOT NULL,
     time TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
   );`,
   `ALTER TABLE messages DISABLE ROW LEVEL SECURITY;`

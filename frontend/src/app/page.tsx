@@ -2,8 +2,9 @@
 
 import styles from "./page.module.css";
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const agencies = [
   { name: 'Finexs', image: '/images/finexs.png' },
@@ -24,7 +25,10 @@ const teamSlides = [
 ];
 
 export default function Home() {
+  const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
+  const [searchDep, setSearchDep] = useState("");
+  const [searchArr, setSearchArr] = useState("");
   const [showStickySearch, setShowStickySearch] = useState(false);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
@@ -35,6 +39,7 @@ export default function Home() {
   // Manage active dropdown key: 'hero-dep' | 'hero-ret' | 'hero-pass' | 'header-dep' | 'header-ret' | 'header-pass' | null
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAgencyLoggedIn, setIsAgencyLoggedIn] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -342,7 +347,14 @@ export default function Home() {
             <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="8"></circle>
             </svg>
-            <input type="text" placeholder="Départ" className={styles.capsuleInput} />
+            <input
+              type="text"
+              placeholder="Départ"
+              className={styles.capsuleInput}
+              value={searchDep}
+              onChange={e => setSearchDep(e.target.value)}
+              onClick={e => e.stopPropagation()}
+            />
           </div>
 
           {/* Destination */}
@@ -350,7 +362,14 @@ export default function Home() {
             <svg className={styles.capsuleIcon} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="8"></circle>
             </svg>
-            <input type="text" placeholder="Destination" className={styles.capsuleInput} />
+            <input
+              type="text"
+              placeholder="Destination"
+              className={styles.capsuleInput}
+              value={searchArr}
+              onChange={e => setSearchArr(e.target.value)}
+              onClick={e => e.stopPropagation()}
+            />
           </div>
 
           {/* Date Départ */}
@@ -423,9 +442,19 @@ export default function Home() {
           </div>
 
           {/* Submit Button */}
-          <Link href="/reserver" className={styles.capsuleSubmitBtn} style={{ textDecoration: "none" }}>
+          <button
+            type="button"
+            className={styles.capsuleSubmitBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              const params = new URLSearchParams();
+              if (searchDep.trim()) params.set("dep", searchDep.trim());
+              if (searchArr.trim()) params.set("arr", searchArr.trim());
+              router.push(`/reserver${params.toString() ? `?${params.toString()}` : ""}`);
+            }}
+          >
             Rechercher
-          </Link>
+          </button>
         </div>
       </div>
     );
@@ -460,7 +489,7 @@ export default function Home() {
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            entry.target.classList.add(styles.visible);
+            entry.target.classList.add(styles.revealVisible);
           }
         });
       },
@@ -479,9 +508,9 @@ export default function Home() {
   }, []);
 
   return (
-    <main className={styles.main}>
+    <>
       {/* Header */}
-      <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""}`}>
+      <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""} ${scrolled ? styles.headerScrolled : ""}`}>
         <div className={styles.headerContent}>
           <div className={styles.logoContainer}>
             <img 
@@ -492,8 +521,9 @@ export default function Home() {
           </div>
           <nav className={styles.nav}>
             <Link href="/reserver">Réserver</Link>
-            <a href="#agences">Agences</a>
-            <a href="#tracabilite">Traçabilité</a>
+            <Link href="/agences">Agences</Link>
+            <Link href="/tracabilite">Traçabilité</Link>
+            <Link href="/location">Location</Link>
             {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
             {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Agence</Link>}
             {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Espace Voyageur</Link>}
@@ -509,7 +539,33 @@ export default function Home() {
               "Mon Espace"
             )}
           </button>
+          <button
+            className={styles.hamburgerBtn}
+            aria-label="Menu"
+            onClick={() => setMobileMenuOpen(o => !o)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:24,height:24}}>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
         </div>
+
+        {mobileMenuOpen && (
+          <div className={styles.mobileMenu}>
+            <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>Réserver</Link>
+            <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>Agences</Link>
+            <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>Traçabilité</Link>
+            <Link href="/location" onClick={() => setMobileMenuOpen(false)}>Location</Link>
+            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>Admin</Link>}
+            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>Agence</Link>}
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>Mon espace</Link>}
+            <button onClick={() => { toggleConnection(new MouseEvent('click') as any); setMobileMenuOpen(false); }} style={{background:"#00673C",color:"#fff",fontWeight:700,padding:"10px 20px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
+              {!isLoggedIn ? "Connexion" : "Mon compte"}
+            </button>
+          </div>
+        )}
 
         {/* Sticky Search Bar (BlaBlaCar style) */}
         {showStickySearch && (
@@ -520,6 +576,7 @@ export default function Home() {
           </div>
         )}
       </header>
+      <main className={styles.main}>
 
       {/* Hero Section */}
       <section className={styles.hero}>
@@ -887,8 +944,9 @@ export default function Home() {
             <h4>Services</h4>
             <ul>
               <li><Link href="/reserver">Réserver un billet</Link></li>
-              <li><a href="#agences">Agences de transport</a></li>
-              <li><a href="#tracabilite">Suivre un colis</a></li>
+              <li><Link href="/agences">Agences de transport</Link></li>
+              <li><Link href="/tracabilite">Suivre un colis</Link></li>
+              <li><Link href="/location">Location de bus</Link></li>
               <li><a href="#qui-sommes-nous">Qui sommes-nous ?</a></li>
             </ul>
           </div>
@@ -942,5 +1000,6 @@ export default function Home() {
       </footer>
 
     </main>
+    </>
   );
 }

@@ -5,7 +5,11 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-const API_BASE = "http://localhost:5000/api/agency";
+const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/agency`;
+const getAuthHeaders = () => ({
+  "Authorization": `Bearer ${typeof window !== "undefined" ? localStorage.getItem("safetrip_token") || "" : ""}`,
+  "Content-Type": "application/json",
+});
 
 interface Journey {
   id: number;
@@ -20,8 +24,10 @@ interface Journey {
   price: number;
   amenities: string[];
   amenityKeys: string[];
+  busClass?: string;
   warning?: string;
   isNight?: boolean;
+  busId?: string;
 }
 
 interface Passenger {
@@ -65,6 +71,7 @@ interface ChatMessage {
   sender: "agency" | "contact";
   text: string;
   time: string;
+  isRead?: boolean;
 }
 
 const PARTNER_AGENCIES = [
@@ -75,11 +82,22 @@ const PARTNER_AGENCIES = [
   { name: "Men Travel", logo: "/images/mentravel.png", cert: "Partenaire Premium" }
 ];
 
+const RESERVATION_AMENITIES = [
+  { key: "reclining", label: "Sièges inclinables" },
+  { key: "plug", label: "Prises électriques" },
+  { key: "wifi", label: "Wi-Fi" },
+  { key: "toilet", label: "Toilettes" },
+  { key: "ac", label: "Climatisation" },
+  { key: "pmr", label: "Personne à mobilité réduite" },
+  { key: "catering", label: "Service de restauration disponible" }
+];
+
 export default function AgencyDashboard() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [isMounted, setIsMounted] = useState(false);
   const [selectedAgencyName, setSelectedAgencyName] = useState("Finexs Voyage");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Premium Sidebar Navigation Active Tab
   const [agencyActiveTab, setAgencyActiveTab] = useState("dashboard");
@@ -91,7 +109,6 @@ export default function AgencyDashboard() {
   
   // Simulated Bus Fleet Database
   const [busesState, setBusesState] = useState<Bus[]>([]);
-  const [selectedBusForPlan, setSelectedBusForPlan] = useState<Bus | null>(null);
 
   // Simulated Colis/Baggage Database
   const [colisState, setColisState] = useState<Colis[]>([]);
@@ -113,8 +130,17 @@ export default function AgencyDashboard() {
   const [arrCity, setArrCity] = useState("");
   const [ticketPrice, setTicketPrice] = useState("");
   const [depTime, setDepTime] = useState("08:00");
-  const [busClass, setBusClass] = useState<"VIP" | "Confort" | "Classique" | "Executive Class">("VIP");
+  const [selectedBusId, setSelectedBusId] = useState("");
+  const [expandedRouteKey, setExpandedRouteKey] = useState<string | null>(null);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  const [departureRouteSearch, setDepartureRouteSearch] = useState("");
+  const [departureDayFilter, setDepartureDayFilter] = useState("all");
+  const [departureTimeFilter, setDepartureTimeFilter] = useState("");
+  const [departureClassFilter, setDepartureClassFilter] = useState("");
+  const [routeDropdownOpen, setRouteDropdownOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(false);
+  const isFirstMsgLoad = useRef(true);
+  const prevUnreadCount = useRef<number | null>(null);
   
   // UI Toast Alerts & QR scanner modal variables
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -173,8 +199,10 @@ export default function AgencyDashboard() {
       price: j.price,
       amenities: j.amenities || [],
       amenityKeys: j.amenity_keys || [],
+      busClass: j.buses?.bus_class || j.bus_class || undefined,
       warning: j.warning || undefined,
-      isNight: j.is_night || false
+      isNight: j.is_night || false,
+      busId: j.bus_id || undefined
     });
 
     // Helper to map DB row to frontend Bus interface
@@ -217,10 +245,11 @@ export default function AgencyDashboard() {
     const hydrateFromApi = async () => {
       const storedAgencyIdStr = localStorage.getItem("safetrip_agency_id") || "1";
       const storedAgencyId = parseInt(storedAgencyIdStr, 10) || 1;
+      const headers = getAuthHeaders();
 
       // 1. Fetch ALL journeys (not filtered — we filter client-side)
       try {
-        const journeysRes = await fetch(`${API_BASE}/journeys/all`);
+        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers });
         if (journeysRes.ok) {
           const rawJourneys = await journeysRes.json();
           const journeysArr = Array.isArray(rawJourneys) ? rawJourneys : (rawJourneys && Array.isArray(rawJourneys.value) ? rawJourneys.value : []);
@@ -234,7 +263,7 @@ export default function AgencyDashboard() {
 
       // 2. Fetch buses
       try {
-        const busesRes = await fetch(`${API_BASE}/buses`);
+        const busesRes = await fetch(`${API_BASE}/buses`, { headers });
         if (busesRes.ok) {
           const rawBuses = await busesRes.json();
           const busesArr = Array.isArray(rawBuses) ? rawBuses : (rawBuses && Array.isArray(rawBuses.value) ? rawBuses.value : []);
@@ -247,7 +276,7 @@ export default function AgencyDashboard() {
 
       // 3. Fetch colis
       try {
-        const colisRes = await fetch(`${API_BASE}/colis`);
+        const colisRes = await fetch(`${API_BASE}/colis`, { headers });
         if (colisRes.ok) {
           const rawColis = await colisRes.json();
           const colisArr = Array.isArray(rawColis) ? rawColis : (rawColis && Array.isArray(rawColis.value) ? rawColis.value : []);
@@ -260,7 +289,7 @@ export default function AgencyDashboard() {
 
       // 4. Fetch all messages
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${storedAgencyId}`);
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${storedAgencyId}`, { headers });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -269,7 +298,8 @@ export default function AgencyDashboard() {
               id: m.id,
               sender: m.sender as "agency" | "contact",
               text: m.text,
-              time: m.time
+              time: m.time,
+              isRead: m.is_read
             }));
           });
           setChatThreads(mapped);
@@ -280,7 +310,7 @@ export default function AgencyDashboard() {
 
       // 5. Fetch agency profile
       try {
-        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${storedAgencyId}`);
+        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${storedAgencyId}`, { headers });
         if (profileRes.ok) {
           const p = await profileRes.json();
           if (p.email) setProfileEmail(p.email);
@@ -306,10 +336,38 @@ export default function AgencyDashboard() {
     j.operator.toLowerCase().includes(selectedAgencyName.split(" ")[0].toLowerCase())
   );
 
+  const agencyJourneyGroups = agencyJourneys.reduce((groups, journey) => {
+    const dep = journey.depStation.split(" - ")[0];
+    const arr = journey.arrStation.split(" - ")[0];
+    const key = `${dep} → ${arr}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(journey);
+    return groups;
+  }, {} as Record<string, Journey[]>);
+
+  const agencyRouteEntries = Object.entries(agencyJourneyGroups).map(([route, journeys]) => ({
+    route,
+    journeys: [...journeys].sort((a, b) => a.depTime.localeCompare(b.depTime))
+  }));
+
   // Filter colis list to only display operations of the selected agency
   const agencyColis = colisState.filter(c => 
     c.agencyId === currentAgencyId || c.agency.toLowerCase().includes(selectedAgencyName.split(" ")[0].toLowerCase())
   );
+
+  // Filter out buses that are already assigned to another journey at the exact same departure time
+  const assignedBusIdsAtTime = new Set(
+    agencyJourneys.filter(j => j.depTime === depTime).map(j => j.busId).filter(Boolean)
+  );
+
+  const agencyAvailableBuses = busesState.filter(b =>
+    b.agencyId === currentAgencyId &&
+    b.status !== "En maintenance" &&
+    !b.id.includes("-LOC-") &&
+    !assignedBusIdsAtTime.has(b.id)
+  );
+
+  const selectedBusForJourney = busesState.find(b => b.id === selectedBusId) || null;
 
   // Fetch passenger lists from API for each journey
   useEffect(() => {
@@ -317,10 +375,10 @@ export default function AgencyDashboard() {
 
     const fetchAllPassengers = async () => {
       const newPassengersMap: { [journeyId: number]: Passenger[] } = {};
-      
+      const headers = getAuthHeaders();
       try {
         await Promise.all(journeysState.map(async (j) => {
-          const res = await fetch(`${API_BASE}/passengers/${j.id}`);
+          const res = await fetch(`${API_BASE}/passengers/${j.id}`, { headers });
           if (res.ok) {
             const rawPassengers = await res.json();
             newPassengersMap[j.id] = rawPassengers.map((p: any) => ({
@@ -335,25 +393,8 @@ export default function AgencyDashboard() {
           }
         }));
         setPassengersMap(newPassengersMap);
-      } catch {
-        // Fallback: generate simulated passengers
-        const passengerTemplates = [
-          { name: "Marc Ndip", phone: "+237 699 01 22 33", seat: "1A (VIP)", status: "Enregistré", luggageCount: 2, luggageScanned: true },
-          { name: "Syntyche Toukam", phone: "+237 677 44 55 66", seat: "2B (VIP)", status: "Payé", luggageCount: 1, luggageScanned: false },
-          { name: "Jean-Pierre Talla", phone: "+237 655 77 88 99", seat: "4C", status: "Payé", luggageCount: 3, luggageScanned: true },
-          { name: "Carine Bella", phone: "+237 691 12 34 56", seat: "5D", status: "En attente", luggageCount: 0, luggageScanned: false },
-          { name: "Patrick Fotso", phone: "+237 670 98 76 54", seat: "8A", status: "Payé", luggageCount: 2, luggageScanned: false }
-        ];
-        journeysState.forEach(j => {
-          const seedCount = 4 + (j.id % 4);
-          const tripPassengers: Passenger[] = [];
-          for (let i = 0; i < seedCount; i++) {
-            const temp = passengerTemplates[(j.id + i) % passengerTemplates.length];
-            tripPassengers.push({ id: i + 1, name: temp.name, phone: temp.phone, seat: temp.seat, status: temp.status as any, luggageCount: temp.luggageCount, luggageScanned: temp.luggageScanned });
-          }
-          newPassengersMap[j.id] = tripPassengers;
-        });
-        setPassengersMap(newPassengersMap);
+      } catch (err) {
+        console.error("⚠️ Error fetching passengers from Supabase:", err);
       }
     };
 
@@ -365,8 +406,9 @@ export default function AgencyDashboard() {
     if (!selectedAgencyName || !isMounted) return;
     
     const refetchForAgency = async () => {
+      const headers = getAuthHeaders();
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`);
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -375,7 +417,8 @@ export default function AgencyDashboard() {
               id: m.id,
               sender: m.sender as "agency" | "contact",
               text: m.text,
-              time: m.time
+              time: m.time,
+              isRead: m.is_read
             }));
           });
           setChatThreads(mapped);
@@ -385,7 +428,7 @@ export default function AgencyDashboard() {
       }
 
       try {
-        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${currentAgencyId}`);
+        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${currentAgencyId}`, { headers });
         if (profileRes.ok) {
           const p = await profileRes.json();
           setProfileEmail(p.email || "");
@@ -400,6 +443,82 @@ export default function AgencyDashboard() {
 
     refetchForAgency();
   }, [selectedAgencyName, isMounted, currentAgencyId]);
+
+  // Real-time message polling for the agency dashboard (with new message notifications)
+  useEffect(() => {
+    if (!isMounted || !selectedAgencyName) return;
+
+    const pollMessages = async () => {
+      const headers = getAuthHeaders();
+      try {
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers });
+        if (msgRes.ok) {
+          const rawThreads = await msgRes.json();
+          const mapped: { [contactId: string]: ChatMessage[] } = {};
+          let unreadCount = 0;
+
+          Object.keys(rawThreads).forEach(threadId => {
+            const list = rawThreads[threadId] || [];
+            
+            // Count unread passenger messages
+            const unreadPassengerMsgs = list.filter((m: any) => m.sender === "contact" && !m.is_read);
+            unreadCount += unreadPassengerMsgs.length;
+
+            mapped[threadId] = list.map((m: any) => ({
+              id: m.id,
+              sender: m.sender as "agency" | "contact",
+              text: m.text,
+              time: m.time,
+              isRead: m.is_read
+            }));
+          });
+
+          // Show/hide yellow notification dot
+          if (unreadCount > 0) {
+            setUnreadMessages(true);
+          } else {
+            setUnreadMessages(false);
+          }
+
+          // Show Toast notification if unread messages count increased
+          if (prevUnreadCount.current !== null && unreadCount > prevUnreadCount.current) {
+            showToast("🔔 Nouveau message reçu d'un voyageur !", true);
+          } else if (prevUnreadCount.current === null && unreadCount > 0) {
+            showToast("💬 Vous avez des messages voyageurs en attente de réponse !", true);
+          }
+
+          prevUnreadCount.current = unreadCount;
+          setChatThreads(mapped);
+        }
+      } catch (err) {
+        console.warn("⚠️ Echec de la mise à jour des messages.", err);
+      }
+    };
+
+    pollMessages();
+    const interval = setInterval(pollMessages, 3000);
+    return () => clearInterval(interval);
+  }, [isMounted, selectedAgencyName, currentAgencyId]);
+
+  // Sync mark messages as read for the active contact thread
+  useEffect(() => {
+    if (!isMounted || !activeContactId) return;
+    
+    const markAsRead = async () => {
+      try {
+        const storedAgencyId = localStorage.getItem("safetrip_agency_id") || "1";
+        await fetch(`${API_BASE}/messages/${activeContactId}/read?agency_id=${storedAgencyId}`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ role: "agency" })
+        });
+      } catch (err) {
+        console.warn("⚠️ Error marking messages as read:", err);
+      }
+    };
+    
+    markAsRead();
+  }, [activeContactId, isMounted, chatThreads[activeContactId]?.length]);
 
   const showToast = (message: string, isSuccess = true) => {
     setToastMessage(message);
@@ -443,7 +562,7 @@ export default function AgencyDashboard() {
   const handlePlanTrip = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!depCity || !arrCity || !ticketPrice) {
+    if (!depCity || !arrCity || !ticketPrice || !selectedBusForJourney) {
       showToast("Veuillez renseigner tous les champs obligatoires.", false);
       return;
     }
@@ -474,18 +593,17 @@ export default function AgencyDashboard() {
     const arrTimeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 
     const labelMapping: { [key: string]: string } = {
+      reclining: "Sièges inclinables",
       wifi: "Wi-Fi",
       ac: "Climatisation",
       plug: "Prises électriques",
       toilet: "Toilettes",
-      catering: "Restauration",
-      pmr: "Accès PMR",
-      instant: "Réservation instantanée",
-      ebillet: "E-billets"
+      catering: "Service de restauration disponible",
+      pmr: "Personne à mobilité réduite"
     };
     
     const labelAmenities = selectedAmenities.map(k => labelMapping[k] || k);
-    if (busClass === "VIP") {
+    if (selectedBusForJourney.busClass === "VIP" || selectedBusForJourney.busClass === "Executive Class") {
       labelAmenities.push("Sièges VIP");
     }
 
@@ -494,9 +612,10 @@ export default function AgencyDashboard() {
       try {
         const res = await fetch(`${API_BASE}/journeys`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
-            operator: `${activeAgencyObj.name} ${busClass}`,
+            bus_id: selectedBusForJourney.id,
+            operator: `${activeAgencyObj.name} ${selectedBusForJourney.busClass}`,
             logo: activeAgencyObj.logo,
             dep_time: depTime,
             arr_time: arrTimeStr,
@@ -528,13 +647,17 @@ export default function AgencyDashboard() {
           setJourneysState(prev => [...prev, newJourney]);
           setSelectedJourneyId(newJourney.id);
           showToast(`Super ! Le trajet ${depCity} → ${arrCity} (${depTime}) est planifié et publié sur SafeTrip.`);
-        } else { throw new Error("API error"); }
-      } catch {
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Erreur serveur ${res.status}`);
+        }
+      } catch (err: any) {
+        console.error("❌ Erreur de création de trajet dans la BD:", err);
         // Fallback to localStorage
         const newJourney: Journey = {
           id: Date.now(),
           type: "bus",
-          operator: `${activeAgencyObj.name} ${busClass}`,
+          operator: `${activeAgencyObj.name} ${selectedBusForJourney ? selectedBusForJourney.busClass : ""}`,
           logo: activeAgencyObj.logo,
           depTime: depTime,
           arrTime: arrTimeStr,
@@ -549,17 +672,50 @@ export default function AgencyDashboard() {
         localStorage.setItem("safetrip_journeys", JSON.stringify(updatedJourneys));
         setJourneysState(updatedJourneys);
         setSelectedJourneyId(newJourney.id);
-        showToast(`Super ! Le trajet ${depCity} → ${arrCity} (${depTime}) est planifié et publié sur SafeTrip (hors-ligne).`);
+        showToast(`Trajet planifié en local (hors-ligne). Erreur BD : ${err?.message || "Inconnue"}`, false);
       }
 
       setDepCity("");
       setArrCity("");
       setTicketPrice("");
       setDepTime("08:00");
+      setSelectedBusId("");
       setSelectedAmenities([]);
     };
 
     createJourneyApi();
+  };
+
+  const handleDeleteJourney = async (journeyId: number) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet horaire ? Tous les passagers associés seront également supprimés.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/journeys/${journeyId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders()
+      });
+
+      if (res.ok) {
+        setJourneysState(prev => prev.filter(j => j.id !== journeyId));
+        if (selectedJourneyId === journeyId) {
+          setSelectedJourneyId(null);
+        }
+        showToast("Horaire supprimé avec succès ! ✅");
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Impossible de supprimer le trajet.");
+      }
+    } catch (err: any) {
+      console.error("❌ Erreur lors de la suppression du trajet:", err);
+      // Local fallback
+      setJourneysState(prev => prev.filter(j => j.id !== journeyId));
+      if (selectedJourneyId === journeyId) {
+        setSelectedJourneyId(null);
+      }
+      showToast(`Horaire retiré. Erreur BD : ${err?.message || "Inconnue"}`, false);
+    }
   };
 
   const togglePassengerCheckIn = async (passengerId: number) => {
@@ -580,7 +736,7 @@ export default function AgencyDashboard() {
 
     // Persist to backend
     try {
-      await fetch(`${API_BASE}/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT" });
+      await fetch(`${API_BASE}/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT", headers: getAuthHeaders() });
     } catch { /* silent fallback */ }
     
     showToast("Statut d'enregistrement du passager mis à jour.");
@@ -608,7 +764,7 @@ export default function AgencyDashboard() {
 
     // Persist scan to backend
     try {
-      await fetch(`${API_BASE}/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT" });
+      await fetch(`${API_BASE}/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT", headers: getAuthHeaders() });
     } catch { /* silent fallback */ }
 
     // 2. Generate or update colis
@@ -659,51 +815,17 @@ export default function AgencyDashboard() {
     try {
       await fetch(`${API_BASE}/messages/${activeContactId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sender: "agency", text: chatInputText, time: timeStr, agency_id: 1 })
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ sender: "agency", text: chatInputText, time: timeStr, agency_id: currentAgencyId })
       });
     } catch { /* silent fallback */ }
-
-    // Simulate smart dynamic reply in 1.5 seconds
-    setTimeout(async () => {
-      let replyText = "Entendu, notre équipe prend en charge votre demande.";
-      if (activeContactId === "support") {
-        replyText = "Nous avons bien reçu vos documents d'immatriculation. La nouvelle ligne sera active d'ici 30 minutes après vérification administrative. Merci !";
-      } else if (activeContactId === "marc") {
-        replyText = "Super, merci beaucoup pour la confirmation rapide ! SafeTrip est vraiment top.";
-      } else if (activeContactId === "syntyche") {
-        replyText = "C'est noté, je réserverai à nouveau chez vous pour mon prochain déplacement.";
-      }
-
-      const replyTime = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-      const replyMsg: ChatMessage = {
-        id: Date.now() + 1,
-        sender: "contact",
-        text: replyText,
-        time: replyTime
-      };
-
-      setChatThreads(prev => ({
-        ...prev,
-        [activeContactId]: [...(prev[activeContactId] || []), replyMsg]
-      }));
-
-      // Persist reply to backend
-      try {
-        await fetch(`${API_BASE}/messages/${activeContactId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sender: "contact", text: replyText, time: replyTime, agency_id: 1 })
-        });
-      } catch { /* silent fallback */ }
-    }, 1500);
   };
 
   // Save profile administrative changes
   const handleSaveAgencyProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     const customProfile = {
-      agency_id: 1,
+      agency_id: currentAgencyId,
       email: profileEmail,
       phone: profilePhone,
       address: profileAddress,
@@ -716,9 +838,10 @@ export default function AgencyDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(customProfile)
       });
-    } catch {
-      // Fallback to localStorage
-      localStorage.setItem("safetrip_agency_profile_custom", JSON.stringify(customProfile));
+    } catch (err) {
+      console.error("⚠️ Error saving profile to Supabase:", err);
+      showToast("Erreur lors de la sauvegarde du profil. Veuillez réessayer.", false);
+      return;
     }
 
     setProfileEditing(false);
@@ -798,6 +921,46 @@ export default function AgencyDashboard() {
   const avgOccupancy = activeBuses.length > 0
     ? (activeBuses.reduce((sum, b) => sum + (b.occupied / b.capacity), 0) / activeBuses.length) * 100
     : 84.5; // fallback to default
+
+  const getJourneyDepartureState = (journey: Journey) => {
+    const now = new Date();
+    const [h, m] = journey.depTime.split(":").map(Number);
+    const depDate = new Date();
+    depDate.setHours(h || 0, m || 0, 0, 0);
+    return depDate.getTime() <= now.getTime() ? "departed" : "upcoming";
+  };
+
+  // Get all unique trips (trajets) registered in the DB
+  const dbTrips = Array.from(new Set(
+    journeysState.map(j => {
+      const dep = j.depStation.split(" - ")[0].trim();
+      const arr = j.arrStation.split(" - ")[0].trim();
+      return `${dep} → ${arr}`;
+    })
+  )).sort();
+
+  // Get all unique bus classes from the DB buses
+  const uniqueBusClasses = Array.from(new Set(
+    busesState.map(b => b.busClass).filter(Boolean)
+  )).sort();
+
+  const filteredDepartureJourneys = [...agencyJourneys]
+    .filter(j => {
+      const depCityName = j.depStation.split(" - ")[0].trim().toLowerCase();
+      const arrCityName = j.arrStation.split(" - ")[0].trim().toLowerCase();
+      const searchClean = departureRouteSearch.replace("→", " ").replace("-", " ").toLowerCase();
+      
+      const routeMatches = !departureRouteSearch.trim() || 
+        searchClean.split(/\s+/).filter(Boolean).every(word => 
+          depCityName.includes(word) || arrCityName.includes(word)
+        );
+      const dayMatches = departureDayFilter === "all" || getJourneyDepartureState(j) === departureDayFilter;
+      const timeMatches = !departureTimeFilter || j.depTime.startsWith(departureTimeFilter);
+      const classText = (j.busClass || j.operator).toLowerCase();
+      const classMatches = !departureClassFilter || classText.includes(departureClassFilter.toLowerCase());
+      return routeMatches && dayMatches && timeMatches && classMatches;
+    })
+    .sort((a, b) => a.depTime.localeCompare(b.depTime));
 
   // Dynamically build chatContacts from actual database chatThreads keys
   const chatContacts = Object.keys(chatThreads).map(threadId => {
@@ -905,8 +1068,19 @@ export default function AgencyDashboard() {
         </div>
       )}
 
+      <div className={styles.mobileTopBar}>
+        <button type="button" onClick={() => setSidebarOpen(o => !o)} className={styles.mobileMenuBtn}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:22,height:22}}>
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <img src="/images/logo-removebg-preview (2).png" alt="SafeTrip" style={{height:36,objectFit:"contain"}} />
+        <div style={{width:34}} />
+      </div>
+      {sidebarOpen && <div className={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />}
+
       {/* 1. VERTICAL SIDEBAR */}
-      <aside className={styles.clientSidebar}>
+      <aside className={sidebarOpen ? `${styles.clientSidebar} ${styles.sidebarOpen}` : styles.clientSidebar}>
         <div className={styles.sidebarBrand}>
           <img src="/images/logo-removebg-preview (2).png" alt="Logo" className={styles.sidebarLogoImg} />
         </div>
@@ -979,13 +1153,51 @@ export default function AgencyDashboard() {
 
           <button
             type="button"
+            className={`${styles.sidebarNavItem} ${agencyActiveTab === "departs" ? styles.sidebarNavItemActive : ""}`}
+            onClick={() => setAgencyActiveTab("departs")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
+              <path d="M3 17h18" />
+              <path d="M6 17V7h12v10" />
+              <circle cx="8" cy="19" r="1.5" />
+              <circle cx="16" cy="19" r="1.5" />
+            </svg>
+            Départs &amp; Passagers
+          </button>
+
+          <button
+            type="button"
             className={`${styles.sidebarNavItem} ${agencyActiveTab === "messagerie" ? styles.sidebarNavItemActive : ""}`}
-            onClick={() => setAgencyActiveTab("messagerie")}
+            onClick={() => {
+              setAgencyActiveTab("messagerie");
+              setUnreadMessages(false);
+            }}
+            style={{ position: "relative" }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
             Messagerie
+            {unreadMessages && (
+              <span style={{
+                position: "absolute",
+                top: "10px",
+                left: "32px",
+                width: "9px",
+                height: "9px",
+                background: "#fccd05",
+                borderRadius: "50%",
+                boxShadow: "0 0 0 2px #0A2F1D",
+                animation: "pulse 1.5s infinite"
+              }}></span>
+            )}
+            <style>{`
+              @keyframes pulse {
+                0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(252, 205, 5, 0.7); }
+                70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(252, 205, 5, 0); }
+                100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(252, 205, 5, 0); }
+              }
+            `}</style>
           </button>
 
           <button
@@ -1043,6 +1255,123 @@ export default function AgencyDashboard() {
             </span>
           </div>
         </div>
+
+        {agencyActiveTab === "departs" && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1.25fr 1fr 1fr 1fr 1.05fr",
+            alignItems: "stretch",
+            background: "#ffffff",
+            border: "2px solid #00673C",
+            borderRadius: "999px",
+            overflow: "visible",
+            margin: "-16px 0 24px 0",
+            boxShadow: "0 18px 45px rgba(0, 103, 60, 0.10)",
+            position: "relative"
+          }}>
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "10px", 
+              padding: "13px 22px", 
+              borderRight: "1px solid #e2e8f0",
+              borderTopLeftRadius: "999px",
+              borderBottomLeftRadius: "999px",
+              position: "relative"
+            }}>
+              <span style={{ width: "11px", height: "11px", border: "3px solid #00673C", borderRadius: "50%", flexShrink: 0 }}></span>
+              <input 
+                type="text" 
+                value={departureRouteSearch} 
+                onChange={(e) => {
+                  setDepartureRouteSearch(e.target.value);
+                  setRouteDropdownOpen(true);
+                }} 
+                onFocus={() => setRouteDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setRouteDropdownOpen(false), 200)}
+                placeholder="Trajet" 
+                style={{ border: "none", outline: "none", width: "100%", fontWeight: 800, color: "#071A0E", background: "transparent", fontFamily: "inherit" }} 
+              />
+              {routeDropdownOpen && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: "15px",
+                  right: "15px",
+                  backgroundColor: "#ffffff",
+                  border: "1px solid #edf2f7",
+                  borderRadius: "12px",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+                  zIndex: 1000,
+                  maxHeight: "220px",
+                  overflowY: "auto",
+                  marginTop: "8px",
+                  padding: "6px"
+                }}>
+                  {dbTrips.filter(t => t.toLowerCase().includes(departureRouteSearch.toLowerCase())).length === 0 ? (
+                    <div style={{ padding: "10px 14px", fontSize: "0.8rem", color: "#a0aec0", fontStyle: "italic" }}>
+                      Aucun trajet trouvé
+                    </div>
+                  ) : (
+                    dbTrips
+                      .filter(t => t.toLowerCase().includes(departureRouteSearch.toLowerCase()))
+                      .map(trip => (
+                        <div
+                          key={trip}
+                          onMouseDown={() => {
+                            setDepartureRouteSearch(trip);
+                            setRouteDropdownOpen(false);
+                          }}
+                          style={{
+                            padding: "10px 14px",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                            fontWeight: 700,
+                            color: "#071A0E",
+                            transition: "all 0.2s ease",
+                            background: departureRouteSearch.toLowerCase() === trip.toLowerCase() ? "rgba(0,103,60,0.08)" : "transparent"
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(0, 103, 60, 0.05)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = departureRouteSearch.toLowerCase() === trip.toLowerCase() ? "rgba(0,103,60,0.08)" : "transparent";
+                          }}
+                        >
+                          {trip}
+                        </div>
+                      ))
+                  )}
+                </div>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "13px 22px", borderRight: "1px solid #e2e8f0" }}>
+              <span style={{ width: "11px", height: "11px", border: "3px solid #00673C", borderRadius: "50%", flexShrink: 0 }}></span>
+              <select value={departureDayFilter} onChange={(e) => setDepartureDayFilter(e.target.value)} style={{ border: "none", outline: "none", width: "100%", fontWeight: 800, color: "#071A0E", background: "transparent", fontFamily: "inherit" }}>
+                <option value="all">Tous les départs</option>
+                <option value="departed">Bus déjà partis</option>
+                <option value="upcoming">Bus à venir</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "13px 22px", borderRight: "1px solid #e2e8f0" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="2.5" style={{ width: "18px", height: "18px", flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              <input type="time" value={departureTimeFilter} onChange={(e) => setDepartureTimeFilter(e.target.value)} style={{ border: "none", outline: "none", width: "100%", fontWeight: 800, color: "#071A0E", background: "transparent", fontFamily: "inherit" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "13px 22px", borderRight: "1px solid #e2e8f0" }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="2.5" style={{ width: "18px", height: "18px", flexShrink: 0 }}><path d="M17 8h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2M5 8H3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" /><rect x="5" y="4" width="14" height="15" rx="2" /></svg>
+              <select value={departureClassFilter} onChange={(e) => setDepartureClassFilter(e.target.value)} style={{ border: "none", outline: "none", width: "100%", fontWeight: 800, color: "#071A0E", background: "transparent", fontFamily: "inherit" }}>
+                <option value="">Classe du bus</option>
+                {uniqueBusClasses.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
+            </div>
+            <button type="button" style={{ border: "none", background: "#c99a05", color: "#071A0E", fontWeight: 900, fontFamily: "inherit", fontSize: "0.9rem", cursor: "pointer", borderTopRightRadius: "999px", borderBottomRightRadius: "999px" }}>
+              Rechercher
+            </button>
+          </div>
+        )}
 
         {/* TAB 1: DASHBOARD VIEW */}
         {agencyActiveTab === "dashboard" && (
@@ -1214,8 +1543,7 @@ export default function AgencyDashboard() {
                     <button 
                       className={styles.busPlanBtn}
                       onClick={() => {
-                        setSelectedBusForPlan(bus);
-                        setBusClass(bus.busClass);
+                        setSelectedBusId(bus.id);
                         setAgencyActiveTab("horaire");
                         showToast(`Bus ${bus.plaque} sélectionné pour planifier un trajet.`);
                       }}
@@ -1386,16 +1714,19 @@ export default function AgencyDashboard() {
                       </div>
 
                       <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Classe du Bus</label>
+                        <label className={styles.formLabel}>Bus disponible *</label>
                         <select 
                           className={styles.formSelect}
-                          value={busClass}
-                          onChange={(e) => setBusClass(e.target.value as any)}
+                          value={selectedBusId}
+                          onChange={(e) => setSelectedBusId(e.target.value)}
+                          required
                         >
-                          <option value="VIP">VIP Bus (Premium Confort)</option>
-                          <option value="Confort">Confort (Standard climatisé)</option>
-                          <option value="Classique">Classique (Standard)</option>
-                          <option value="Executive Class">Executive Class (Luxe)</option>
+                          <option value="">Sélectionner un bus réel</option>
+                          {agencyAvailableBuses.map(bus => (
+                            <option key={bus.id} value={bus.id}>
+                              {bus.plaque} — {bus.busClass} — {bus.occupied}/{bus.capacity} places
+                            </option>
+                          ))}
                         </select>
                       </div>
 
@@ -1413,78 +1744,17 @@ export default function AgencyDashboard() {
                     <div>
                       <h4 className={styles.amenitiesHeading}>Équipements &amp; Services à Bord</h4>
                       <div className={styles.amenitiesGrid}>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("wifi") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("wifi")}
-                            onChange={() => toggleFormAmenity("wifi")}
-                          />
-                          Wi-Fi
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("ac") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("ac")}
-                            onChange={() => toggleFormAmenity("ac")}
-                          />
-                          Climatisation
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("plug") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("plug")}
-                            onChange={() => toggleFormAmenity("plug")}
-                          />
-                          Prises USB/élec
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("toilet") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("toilet")}
-                            onChange={() => toggleFormAmenity("toilet")}
-                          />
-                          Toilettes
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("catering") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("catering")}
-                            onChange={() => toggleFormAmenity("catering")}
-                          />
-                          Collation
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("pmr") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("pmr")}
-                            onChange={() => toggleFormAmenity("pmr")}
-                          />
-                          Accès PMR
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("instant") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("instant")}
-                            onChange={() => toggleFormAmenity("instant")}
-                          />
-                          Instantané
-                        </label>
-                        <label className={`${styles.amenityCheckLabel} ${selectedAmenities.includes("ebillet") ? styles.amenityChecked : ""}`}>
-                          <input 
-                            type="checkbox"
-                            className={styles.amenityCheckInput}
-                            checked={selectedAmenities.includes("ebillet")}
-                            onChange={() => toggleFormAmenity("ebillet")}
-                          />
-                          E-billet
-                        </label>
+                        {RESERVATION_AMENITIES.map((amenity) => (
+                          <label key={amenity.key} className={`${styles.amenityCheckLabel} ${selectedAmenities.includes(amenity.key) ? styles.amenityChecked : ""}`}>
+                            <input
+                              type="checkbox"
+                              className={styles.amenityCheckInput}
+                              checked={selectedAmenities.includes(amenity.key)}
+                              onChange={() => toggleFormAmenity(amenity.key)}
+                            />
+                            {amenity.label}
+                          </label>
+                        ))}
                       </div>
                     </div>
 
@@ -1517,117 +1787,214 @@ export default function AgencyDashboard() {
                       Aucun trajet planifié pour le moment pour cette agence. Utilisez le planificateur à gauche.
                     </div>
                   ) : (
-                    agencyJourneys.map(j => (
-                      <div 
-                        key={j.id} 
-                        className={`${styles.tripItem} ${selectedJourneyId === j.id ? styles.tripItemActive : ""}`}
-                        onClick={() => setSelectedJourneyId(j.id)}
-                      >
-                        <div className={styles.tripHeader}>
-                          <span className={styles.tripRoute}>
-                            {j.depStation.split(" - ")[0]} → {j.arrStation.split(" - ")[0]}
-                          </span>
-                          <span className={styles.tripPriceBadge}>
-                            {j.price.toLocaleString()} FCFA
-                          </span>
-                        </div>
-                        <div className={styles.tripMeta}>
-                          <div className={styles.tripMetaItem}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
-                              <circle cx="12" cy="12" r="10" />
-                              <polyline points="12 6 12 12 16 14" />
-                            </svg>
-                            {j.depTime} ({j.duration})
+                    agencyRouteEntries.map(({ route, journeys }) => {
+                      const isExpanded = expandedRouteKey === route;
+                      const totalPassengers = journeys.reduce((sum, j) => sum + (passengersMap[j.id]?.length || 0), 0);
+                      const minPrice = Math.min(...journeys.map(j => j.price));
+                      return (
+                        <div key={route} className={styles.tripItem}>
+                          <div className={styles.tripHeader} onClick={() => setExpandedRouteKey(isExpanded ? null : route)} style={{ cursor: "pointer" }}>
+                            <span className={styles.tripRoute}>{route}</span>
+                            <span className={styles.tripPriceBadge}>dès {minPrice.toLocaleString()} FCFA</span>
                           </div>
-                          <div className={styles.tripMetaItem}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
-                              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                              <circle cx="12" cy="7" r="4" />
-                            </svg>
-                            {passengersMap[j.id]?.length || 0} Passagers
+                          <div className={styles.tripMeta} onClick={() => setExpandedRouteKey(isExpanded ? null : route)} style={{ cursor: "pointer" }}>
+                            <div className={styles.tripMetaItem}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              {journeys.length} horaire{journeys.length > 1 ? "s" : ""}
+                            </div>
+                            <div className={styles.tripMetaItem}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                              {totalPassengers} Passagers
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {/* Active Passenger list Roster */}
-                  {selectedJourneyId !== null && (
-                    <div className={styles.passengerSection}>
-                      <h3 className={styles.sectionSubHeading}>
-                        <span>Liste de Passagers &amp; Enregistrement</span>
-                        <span style={{ fontSize: "0.75rem", background: "var(--secondary-blue)", color: "#ffffff", padding: "3px 10px", borderRadius: "10px" }}>
-                          Bus Actif #{selectedJourneyId.toString().slice(-4)}
-                        </span>
-                      </h3>
-                      
-                      {activePassengers.length === 0 ? (
-                        <div className={styles.emptyState} style={{ padding: "20px" }}>
-                          Aucun passager enregistré sur ce bus.
-                        </div>
-                      ) : (
-                        <div className={styles.rosterTableContainer}>
-                          <table className={styles.rosterTable}>
-                            <thead>
-                              <tr>
-                                <th>Passager</th>
-                                <th>Siège</th>
-                                <th>Statut</th>
-                                <th>Bagages</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {activePassengers.map(p => (
-                                <tr key={p.id}>
-                                  <td>
-                                    <div className={styles.passengerNameCell}>
-                                      <strong>{p.name}</strong>
-                                      <span className={styles.passengerPhone}>{p.phone}</span>
+                          {isExpanded && (
+                            <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                              {journeys.map(j => (
+                                <div key={j.id} className={`${styles.tripItem} ${selectedJourneyId === j.id ? styles.tripItemActive : ""}`} onClick={() => setSelectedJourneyId(j.id)} style={{ marginBottom: 0, boxShadow: "none" }}>
+                                  <div className={styles.tripHeader}>
+                                    <span className={styles.tripRoute}>{j.depTime} — {j.arrTime}</span>
+                                    <span className={styles.tripPriceBadge}>{j.price.toLocaleString()} FCFA</span>
+                                  </div>
+                                  <div className={styles.tripMeta} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                    <div style={{ display: "flex", gap: "10px" }}>
+                                      <div className={styles.tripMetaItem}>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
+                                          <circle cx="12" cy="12" r="10" />
+                                          <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        {j.duration}
+                                      </div>
+                                      <div className={styles.tripMetaItem}>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
+                                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                          <circle cx="12" cy="7" r="4" />
+                                        </svg>
+                                        {passengersMap[j.id]?.length || 0} Passagers
+                                      </div>
                                     </div>
-                                  </td>
-                                  <td>
-                                    <span className={styles.seatBadge}>{p.seat}</span>
-                                  </td>
-                                  <td>
-                                    <span 
-                                      className={`${styles.statusPill} ${
-                                        p.status === "Enregistré" ? styles.statusChecked : 
-                                        p.status === "Payé" ? styles.statusPaid : styles.statusPending
-                                      }`}
-                                      onClick={() => togglePassengerCheckIn(p.id)}
-                                      style={{ cursor: "pointer" }}
-                                      title="Cliquez pour changer d'enregistrement"
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteJourney(j.id);
+                                      }}
+                                      style={{
+                                        background: "transparent",
+                                        border: "none",
+                                        cursor: "pointer",
+                                        color: "#e53e3e",
+                                        padding: "4px 8px",
+                                        borderRadius: "6px",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        fontWeight: 800,
+                                        fontSize: "0.72rem",
+                                        fontFamily: "inherit",
+                                        transition: "all 0.2s ease"
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(229,62,62,0.08)"}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                                     >
-                                      {p.status}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <div className={styles.luggageCell}>
-                                      {p.luggageCount > 0 ? (
-                                        p.luggageScanned ? (
-                                          <span className={styles.luggageScannedText}>
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="#2f855a" strokeWidth="3" style={{width:"12px",height:"12px",marginRight:"4.5px",display:"inline-block",verticalAlign:"middle"}}><polyline points="20 6 9 17 4 12"/></svg>{p.luggageCount} Colis
-                                          </span>
-                                        ) : (
-                                          <button 
-                                            type="button"
-                                            className={styles.scanLuggageBtn}
-                                            onClick={() => handleOpenScanner(p)}
-                                          >
-                                            Scanner ({p.luggageCount})
-                                          </button>
-                                        )
-                                      ) : (
-                                        <span style={{ color: "#cbd5e0" }}>Aucun</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: "12px", height: "12px" }}>
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                      </svg>
+                                      Supprimer
+                                    </button>
+                                  </div>
+                                </div>
                               ))}
-                            </tbody>
-                          </table>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {agencyActiveTab === "departs" && (
+          <div className={styles.tabContentFadeIn}>
+            <div className={styles.dashboardGrid}>
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <h2 className={styles.panelTitle}>Départs du jour</h2>
+                </div>
+                <div className={styles.panelBody}>
+                  {agencyJourneys.length === 0 ? (
+                    <div className={styles.emptyState}>Aucun horaire disponible pour cette agence.</div>
+                  ) : filteredDepartureJourneys.length === 0 ? (
+                    <div className={styles.emptyState}>Aucun départ ne correspond aux filtres sélectionnés.</div>
+                  ) : (
+                    filteredDepartureJourneys.map(j => {
+                      const isDeparted = getJourneyDepartureState(j) === "departed";
+                      return (
+                        <div
+                          key={j.id}
+                          className={`${styles.tripItem} ${selectedJourneyId === j.id ? styles.tripItemActive : ""}`}
+                          onClick={() => setSelectedJourneyId(j.id)}
+                        >
+                          <div className={styles.tripHeader}>
+                            <span className={styles.tripRoute}>{j.depStation.split(" - ")[0]} → {j.arrStation.split(" - ")[0]}</span>
+                            <span className={styles.tripPriceBadge}>{isDeparted ? "Parti" : "À venir"}</span>
+                          </div>
+                          <div className={styles.tripMeta}>
+                            <div className={styles.tripMetaItem}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              {j.depTime} ({j.duration})
+                            </div>
+                            <div className={styles.tripMetaItem}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "13px", height: "13px", marginRight: "4px" }}>
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                              {passengersMap[j.id]?.length || 0} Passagers
+                            </div>
+                          </div>
+                          <div className={styles.tripMeta} style={{ marginTop: "6px" }}>
+                            <div className={styles.tripMetaItem}>{j.busClass || "Classe non renseignée"}</div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <h2 className={styles.panelTitle}>Liste des passagers</h2>
+                </div>
+                <div className={styles.panelBody}>
+                  {selectedJourneyId === null ? (
+                    <div className={styles.emptyState}>Choisissez un horaire à gauche pour afficher les passagers.</div>
+                  ) : activePassengers.length === 0 ? (
+                    <div className={styles.emptyState}>Aucun passager enregistré sur cet horaire.</div>
+                  ) : (
+                    <div className={styles.rosterTableContainer}>
+                      <table className={styles.rosterTable}>
+                        <thead>
+                          <tr>
+                            <th>Passager</th>
+                            <th>Siège</th>
+                            <th>Statut</th>
+                            <th>Bagages</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activePassengers.map(p => (
+                            <tr key={p.id}>
+                              <td>
+                                <div className={styles.passengerNameCell}>
+                                  <strong>{p.name}</strong>
+                                  <span className={styles.passengerPhone}>{p.phone}</span>
+                                </div>
+                              </td>
+                              <td><span className={styles.seatBadge}>{p.seat}</span></td>
+                              <td>
+                                <span
+                                  className={`${styles.statusPill} ${p.status === "Enregistré" ? styles.statusChecked : p.status === "Payé" ? styles.statusPaid : styles.statusPending}`}
+                                  onClick={() => togglePassengerCheckIn(p.id)}
+                                  style={{ cursor: "pointer" }}
+                                  title="Cliquez pour changer d'enregistrement"
+                                >
+                                  {p.status}
+                                </span>
+                              </td>
+                              <td>
+                                <div className={styles.luggageCell}>
+                                  {p.luggageCount > 0 ? (
+                                    p.luggageScanned ? (
+                                      <span className={styles.luggageScannedText}>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="#2f855a" strokeWidth="3" style={{width:"12px",height:"12px",marginRight:"4.5px",display:"inline-block",verticalAlign:"middle"}}><polyline points="20 6 9 17 4 12"/></svg>{p.luggageCount} Colis
+                                      </span>
+                                    ) : (
+                                      <button type="button" className={styles.scanLuggageBtn} onClick={() => handleOpenScanner(p)}>
+                                        Scanner ({p.luggageCount})
+                                      </button>
+                                    )
+                                  ) : (
+                                    <span style={{ color: "#cbd5e0" }}>Aucun</span>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -1679,15 +2046,34 @@ export default function AgencyDashboard() {
                 </div>
 
                 <div className={styles.chatMessages}>
-                  {(chatThreads[activeContactId] || []).map(msg => (
-                    <div 
-                      key={msg.id} 
-                      className={`${styles.chatBubble} ${msg.sender === "agency" ? styles.chatBubbleSent : styles.chatBubbleRecv}`}
-                    >
-                      <div>{msg.text}</div>
-                      <div className={styles.chatBubbleTime}>{msg.time}</div>
-                    </div>
-                  ))}
+                  {(chatThreads[activeContactId] || []).map(msg => {
+                    const isSent = msg.sender === "agency";
+                    return (
+                      <div 
+                        key={msg.id} 
+                        className={`${styles.chatBubble} ${isSent ? styles.chatBubbleSent : styles.chatBubbleRecv}`}
+                      >
+                        <div>{msg.text}</div>
+                        <div className={styles.chatBubbleTime} style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px" }}>
+                          <span>{msg.time}</span>
+                          {isSent && (
+                            <span 
+                              style={{ 
+                                color: msg.isRead ? "#fccd05" : "#a0aec0", 
+                                fontSize: "0.85rem", 
+                                fontWeight: "bold",
+                                lineHeight: "1",
+                                marginLeft: "2px"
+                              }}
+                              title={msg.isRead ? "Lu" : "Distribué"}
+                            >
+                              ✓✓
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <form onSubmit={handleSendChatMessage} className={styles.chatInputArea}>

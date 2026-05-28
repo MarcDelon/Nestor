@@ -4,26 +4,50 @@
   align-items: center;
   flex: 1;
   min-height: 100vh;
-  padding: 100px 20px 40px 20px; /* Espace pour le header fixe */
-  background: linear-gradient(135deg, #f0f9f4 0%, #e8f5ef 50%, #f5f8ff 100%);
+  padding: 100px 20px 40px 20px;
+  background: linear-gradient(150deg, #F7F4EE 0%, #EDE9DF 45%, #F2EFE9 100%);
+  position: relative;
+}
+
+.loginGateContainer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(11, 107, 65, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 80% 80%, rgba(200, 148, 30, 0.06) 0%, transparent 55%);
+  pointer-events: none;
 }
 
 .loginCard {
   background: #ffffff;
-  border-radius: 20px;
-  padding: 24px 24px 18px 24px; /* Plus compact */
+  border-radius: 24px;
+  padding: 28px 28px 22px 28px;
   width: 100%;
-  max-width: 360px; /* Plus petit */
-  box-shadow: 0 20px 60px rgba(0, 103, 60, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(0, 103, 60, 0.1);
-  color: #2d3748;
+  max-width: 370px;
+  box-shadow: 0 24px 64px rgba(7, 26, 14, 0.12), 0 4px 16px rgba(7, 26, 14, 0.06);
+  border: 1px solid rgba(230, 225, 214, 0.8);
+  color: #1C2B22;
   position: relative;
   overflow: hidden;
 }
 
+.loginCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #FCD116 0%, #CE1126 50%, #007A5E 100%);
+}
+
 .loginHeader {
   text-align: center;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .loginLogo {
@@ -34,10 +58,10 @@
 
 .loginSubtitle {
   font-size: 0.78rem;
-  color: #718096;
+  color: #6B7D72;
   font-weight: 500;
   margin: 4px 0 10px 0;
-  line-height: 1.4;
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -52,20 +76,21 @@
 .tabLink {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #a0aec0;
+  color: #8A9B90;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
   padding: 4px 8px;
   border-bottom: 2px solid transparent;
+  font-family: 'Syne', 'Montserrat', sans-serif;
 }
 
 .tabLinkActive {
-  color: #00673C;
-  border-bottom: 2px solid #00673C;
+  color: #0B6B41;
+  border-bottom: 2px solid #0B6B41;
 }
 
 .tabSeparator {
-  color: #e2e8f0;
+  color: #D4CFC5;
   font-weight: 300;
   font-size: 0.95rem;
   user-select: none;
@@ -74,7 +99,7 @@
 .formSliderContainer {
   overflow: hidden;
   width: 100%;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .formSlider {
@@ -88,7 +113,7 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   padding: 10px 4px 4px 4px;
   box-sizing: border-box;
 }
@@ -96,62 +121,74 @@
 .formInsideTitle {
   font-size: 1.15rem;
   font-weight: 800;
-  color: #0A2F1D;
+  color: #071A0E;
   text-align: center;
   margin-bottom: 5px;
+  font-family: 'Syne', 'Montserrat', sans-serif;
 }
 
 .inputGroup {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .inputLabel {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: #718096;
+  color: #6B7D72;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .loginInput {
-  background: #f7fafc;
-  border: 1.5px solid #edf2f7;
+  background: #F7F4EE;
+  border: 1.5px solid #E6E1D6;
   border-radius: 10px;
-  padding: 10px 12px;
-  color: #2d3748;
+  padding: 11px 13px;
+  color: #1C2B22;
   font-size: 0.9rem;
-  font-family: inherit;
+  font-family: 'DM Sans', 'Poppins', sans-serif;
   outline: none;
   transition: all 0.3s ease;
 }
 
+.loginInput:focus {
+  border-color: #0B6B41;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(11, 107, 65, 0.10);
+}
+
 .loginBtn {
-  background: #00673C;
+  background: #0B6B41;
   color: #ffffff;
   font-weight: 800;
   font-size: 0.9rem;
-  padding: 12px;
+  padding: 13px;
   border-radius: 10px;
   border: none;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
-  margin-top: 5px;
+  margin-top: 6px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  font-family: 'Syne', 'Montserrat', sans-serif;
 }
 
 .loginBtn:hover {
-  background: #004d2d;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 103, 60, 0.15);
+  background: #071A0E;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(11, 107, 65, 0.22);
+}
+
+.loginBtn:active {
+  transform: translateY(0);
 }
 
 .loginFooter {
   text-align: center;
   font-size: 0.75rem;
-  color: #a0aec0;
+  color: #8A9B90;
   margin-top: 20px;
 }
 
@@ -159,12 +196,12 @@
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: #0A2F1D;
+  background: #071A0E;
   color: #ffffff;
   padding: 16px 24px;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-  border-left: 5px solid var(--accent-gold);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(7, 26, 14, 0.18);
+  border-left: 5px solid #C8941E;
   z-index: 1100;
   display: flex;
   align-items: center;
@@ -192,21 +229,32 @@
   color: #ffffff;
 }
 
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
 /* ============================================================
-   HEADER STYLING FOR UNIFORM LAYOUT
+   HEADER STYLING
    ============================================================ */
 .header {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(247, 244, 238, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   z-index: 1000;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(230, 225, 214, 0.7);
+  box-shadow: 0 4px 24px rgba(7, 26, 14, 0.05);
 }
 
 .headerContent {
@@ -253,29 +301,36 @@
 
 .nav a {
   font-weight: 650;
-  color: #0A2F1D;
+  color: #1C2B22;
   font-size: 0.92rem;
   transition: color 0.3s ease;
+  font-family: 'Syne', 'Montserrat', sans-serif;
 }
 
 .nav a:hover {
-  color: #00673C;
+  color: #0B6B41;
 }
 
 .headerBtn {
   background: transparent;
-  border: 1.5px solid #00673C;
-  color: #00673C;
+  border: 1.5px solid #0B6B41;
+  color: #0B6B41;
   font-weight: 700;
   padding: 8px 22px;
   border-radius: 30px;
   cursor: pointer;
   transition: all 0.3s ease;
+  font-family: 'Syne', 'Montserrat', sans-serif;
 }
 
 .headerBtn:hover {
-  background: #00673C;
+  background: #0B6B41;
   color: #ffffff;
+  box-shadow: 0 4px 14px rgba(11, 107, 65, 0.2);
 }
 
+@media (max-width: 480px) {
+  .loginCard { padding: 20px 16px; margin: 0 12px; }
+  .loginGateContainer { padding: 16px; }
+}
 

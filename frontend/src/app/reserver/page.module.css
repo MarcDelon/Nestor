@@ -1,6 +1,6 @@
 .main {
   width: 100%;
-  background: var(--bg-light);
+  background: var(--bg-cream, #F7F4EE);
   min-height: 100vh;
 }
 
@@ -10,13 +10,13 @@
   top: 0;
   left: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.9); /* Frosted premium header */
+  background: rgba(247, 244, 238, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   z-index: 1000;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(230, 225, 214, 0.7);
+  box-shadow: 0 4px 24px rgba(7, 26, 14, 0.05);
   transition: all var(--transition-speed) ease;
 }
 
@@ -258,7 +258,7 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 25px;
+  gap: 8px; /* Extremely tight spacing between panels for a compact view */
 }
 
 @media (min-width: 992px) {
@@ -270,8 +270,8 @@
 
 /* Map Card */
 .mapCard {
-  height: 120px;
-  border-radius: 18px;
+  height: 60px; /* Reduced vertical height for space saving */
+  border-radius: 14px;
   background: #cbd5e0;
   border: 1px solid rgba(0, 0, 0, 0.05);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.02);
@@ -330,21 +330,21 @@
 /* Filters Card */
 .filterCard {
   background: #ffffff;
-  border-radius: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  padding: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02);
+  border-radius: 16px;
+  border: 1px solid var(--border-warm, #E6E1D6);
+  padding: 10px 14px; /* Highly compact padding */
+  box-shadow: 0 8px 28px rgba(7, 26, 14, 0.06);
 }
 
 .filterHeaderRow {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 18px;
+  margin-bottom: 8px; /* Snug margin */
 }
 
 .filterHeaderRow h3 {
-  font-size: 1.1rem;
+  font-size: 0.88rem; /* Sleeker heading */
   font-weight: 800;
   color: var(--primary-navy);
   margin: 0;
@@ -354,7 +354,7 @@
   background: transparent;
   border: none;
   color: #a0aec0;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   transition: color 0.2s;
@@ -367,16 +367,16 @@
 .filterOptionsList {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px; /* Reduced spacing */
 }
 
 .filterItem {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px; /* Compact gap */
   cursor: pointer;
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 4px 6px; /* Reduced padding */
+  border-radius: 8px;
   transition: all 0.2s ease;
 }
 
@@ -444,8 +444,8 @@
   background: #ffffff;
   border-radius: 20px;
   padding: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-warm, #E6E1D6);
+  box-shadow: 0 8px 28px rgba(7, 26, 14, 0.05);
   justify-content: space-between;
   overflow-x: auto;
   gap: 8px;
@@ -540,9 +540,9 @@
 .journeyCard {
   background: #ffffff;
   border-radius: 22px;
-  border: 1.5px solid rgba(0, 0, 0, 0.03);
+  border: 1.5px solid var(--border-warm, #E6E1D6);
   padding: 24px;
-  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.02);
+  box-shadow: 0 8px 28px rgba(7, 26, 14, 0.05);
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -554,14 +554,16 @@
 }
 
 .journeyCard:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 20px 45px rgba(10, 47, 29, 0.06);
-  border-color: rgba(0, 103, 60, 0.1);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 48px rgba(7, 26, 14, 0.10);
+  border-color: rgba(11, 107, 65, 0.25);
+  border-left: 3px solid var(--secondary-blue, #0B6B41);
 }
 
 .journeyCardSelected {
-  border-color: var(--secondary-blue);
-  box-shadow: 0 20px 45px rgba(0, 103, 60, 0.05);
+  border-color: var(--secondary-blue, #0B6B41);
+  border-left: 3px solid var(--secondary-blue, #0B6B41);
+  box-shadow: 0 20px 48px rgba(11, 107, 65, 0.08);
 }
 
 @keyframes ticketFadeIn {
@@ -870,19 +872,19 @@
 .amenitiesList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 15px;
+  gap: 3px; /* Reduced vertical gap */
+  margin-top: 5px; /* Compact top margin */
 }
 
 .amenityItem {
   display: flex;
   align-items: center;
   cursor: pointer;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 5px 8px; /* Highly compact padding */
+  border-radius: 8px;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
-  gap: 12px;
+  gap: 8px; /* Compact horizontal gap */
   position: relative;
 }
 
@@ -1223,6 +1225,107 @@
   padding: 2px;
   display: block;
 }
+
+/* ── MOBILE RESPONSIVE — RESERVER ── */
+@media (max-width: 991px) {
+  .mainContentCol { width: 100%; }
+  .bookingLayout { flex-direction: column; }
+}
+
+@media (max-width: 767px) {
+  .nav { display: none !important; }
+  .hamburgerBtn { display: flex !important; }
+  .bookingContainer { padding: 72px 12px 50px; }
+  .sidebarCol { display: none; }
+  .sidebarColVisible { display: flex; }
+
+  /* Results header */
+  .resultsHeader { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .resultsHeaderTitleCol h2 { font-size: 1.1rem; }
+  .sortPillsRow { flex-wrap: wrap; gap: 6px; }
+
+  /* Journey cards */
+  .journeyCard { padding: 16px; border-radius: 16px; gap: 12px; }
+  .cardMainRow { flex-wrap: wrap; gap: 10px; }
+  .timeScheduleContainer { gap: 12px; }
+  .timeCol { min-width: 70px; }
+  .timeValue { font-size: 1.05rem; }
+  .stationLabel { font-size: 0.7rem; }
+  .durationSlider { min-width: 60px; }
+  .priceColumn { min-width: 80px; }
+  .cardFooterRow { flex-wrap: wrap; gap: 8px; }
+  .amenitiesRow { flex-wrap: wrap; gap: 4px; }
+  .amenityTag { font-size: 0.62rem; padding: 3px 6px; }
+  .bookBtn { width: 100%; justify-content: center; padding: 10px 14px; border-radius: 10px; margin-top: 2px; }
+  .journeyCardsList { gap: 12px; }
+
+  /* Popular routes */
+  .popularIntro h2 { font-size: 1.1rem; }
+  .popularCity { font-size: 1.05rem; }
+  .popularCard { padding: 16px; border-radius: 16px; }
+}
+
+@media (max-width: 480px) {
+  .bookingContainer { padding: 66px 10px 40px; }
+  .journeyCard { padding: 13px; border-radius: 14px; }
+  .timeValue { font-size: 0.95rem; }
+  .timeCol { min-width: 60px; }
+  .durationSlider { display: none; }
+  .priceColumn { min-width: 70px; }
+  .priceValue { font-size: 1.1rem; }
+  .priceCurrency { font-size: 0.7rem; }
+  .amenityTag { font-size: 0.58rem; padding: 2px 5px; }
+  .bookBtn { font-size: 0.78rem; padding: 9px 10px; }
+  .searchCapsuleBar { border-radius: 14px; }
+  .popularCard { padding: 13px; }
+  .popularCity { font-size: 0.95rem; }
+}
+
+.mobileMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #ffffff;
+  border-top: 1px solid rgba(230,225,214,0.7);
+  padding: 8px 0;
+}
+
+.mobileMenu a {
+  display: block;
+  padding: 14px 24px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--primary-navy);
+  text-decoration: none;
+  border-bottom: 1px solid #f7fafc;
+  transition: background 0.15s ease;
+}
+
+.mobileMenu a:hover { background: #f7fafc; }
+
+.hamburgerBtn { display: none; background: none; border: none; cursor: pointer; padding: 6px; }
+
+.filterToggleBtn {
+  display: none;
+  width: 100%;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--primary-navy);
+  cursor: pointer;
+  margin-bottom: 14px;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+}
+
+@media (max-width: 991px) {
+  .filterToggleBtn { display: flex; }
+}
+
 
 
 

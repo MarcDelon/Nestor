@@ -51,17 +51,17 @@ let simColis = [
 
 let simMessages: { [threadId: string]: any[] } = {
   support: [
-    { id: 1, sender: 'contact', text: "Bonjour, l'équipe d'assistance SafeTrip est disponible. Comment pouvons-nous vous aider aujourd'hui ?", time: '09:15' },
-    { id: 2, sender: 'agency', text: 'Bonjour, nous aimerions certifier une nouvelle ligne de bus Douala-Kribi.', time: '09:30' },
-    { id: 3, sender: 'contact', text: "Parfait ! Veuillez nous transmettre la plaque d'immatriculation et l'agrément ministériel du bus dans l'onglet Profil.", time: '09:32' }
+    { id: 1, sender: 'contact', text: "Bonjour, l'équipe d'assistance SafeTrip est disponible. Comment pouvons-nous vous aider aujourd'hui ?", time: '09:15', is_read: true },
+    { id: 2, sender: 'agency', text: 'Bonjour, nous aimerions certifier une nouvelle ligne de bus Douala-Kribi.', time: '09:30', is_read: true },
+    { id: 3, sender: 'contact', text: "Parfait ! Veuillez nous transmettre la plaque d'immatriculation et l'agrément ministériel du bus dans l'onglet Profil.", time: '09:32', is_read: true }
   ],
   marc: [
-    { id: 1, sender: 'contact', text: 'Bonjour Finexs, mon colis de référence BAG-2026-FX58-A est bien enregistré à bord ?', time: '11:05' },
-    { id: 2, sender: 'agency', text: 'Bonjour Marc, oui ! Votre sac de voyage noir de 15 kg a été scanné avec succès et est à bord.', time: '11:20' }
+    { id: 1, sender: 'contact', text: 'Bonjour Finexs, mon colis de référence BAG-2026-FX58-A est bien enregistré à bord ?', time: '11:05', is_read: true },
+    { id: 2, sender: 'agency', text: 'Bonjour Marc, oui ! Votre sac de voyage noir de 15 kg a été scanné avec succès et est à bord.', time: '11:20', is_read: true }
   ],
   syntyche: [
-    { id: 1, sender: 'contact', text: 'Merci pour le voyage VIP de ce matin, le bus était très confortable et le Wi-Fi super rapide !', time: '12:00' },
-    { id: 2, sender: 'agency', text: 'Merci Syntyche ! Nous mettons tout en oeuvre pour vous offrir le meilleur service possible. Bon séjour !', time: '12:15' }
+    { id: 1, sender: 'contact', text: 'Merci pour le voyage VIP de ce matin, le bus était très confortable et le Wi-Fi super rapide !', time: '12:00', is_read: true },
+    { id: 2, sender: 'agency', text: 'Merci Syntyche ! Nous mettons tout en oeuvre pour vous offrir le meilleur service possible. Bon séjour !', time: '12:15', is_read: true }
   ]
 };
 
@@ -148,14 +148,36 @@ export const getJourneys = async (req: Request, res: Response) => {
 };
 
 // ============================================================
-// 5. GET /api/agency/journeys/all — List ALL journeys (no filter)
+// 5. GET /api/agency/journeys/all — List ALL journeys (optional sort query)
 // ============================================================
-export const getAllJourneys = async (_req: Request, res: Response) => {
+export const getAllJourneys = async (req: Request, res: Response) => {
   try {
     if (supabase) {
-      const { data, error } = await (supabase as any).from('journeys').select('*').order('id');
+      const { data, error } = await (supabase as any).from('journeys').select('*, buses(id, capacity, bus_class, occupied)').order('id');
       if (error) return res.status(500).json({ error: error.message });
-      return res.json(data);
+      
+      let results = [...(data || [])];
+      const sortParam = (req.query.sort as string) || '';
+      
+      if (sortParam === 'vip') {
+        results.sort((a, b) => {
+          const isVipA = a.operator.toLowerCase().includes('vip') || a.operator.toLowerCase().includes('executive');
+          const isVipB = b.operator.toLowerCase().includes('vip') || b.operator.toLowerCase().includes('executive');
+          if (isVipA && !isVipB) return -1;
+          if (!isVipA && isVipB) return 1;
+          return a.id - b.id;
+        });
+      } else if (sortParam === 'classic') {
+        results.sort((a, b) => {
+          const isClsA = a.operator.toLowerCase().includes('classique');
+          const isClsB = b.operator.toLowerCase().includes('classique');
+          if (isClsA && !isClsB) return -1;
+          if (!isClsA && isClsB) return 1;
+          return a.id - b.id;
+        });
+      }
+      
+      return res.json(results);
     }
     return res.json([]);
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
@@ -166,12 +188,34 @@ export const getAllJourneys = async (_req: Request, res: Response) => {
 // ============================================================
 export const createJourney = async (req: Request, res: Response) => {
   try {
-    const { operator, logo, dep_time, arr_time, duration, dep_station, arr_station, price, amenities, amenity_keys, warning, is_night, agency_name } = req.body;
+    const { operator, logo, dep_time, arr_time, duration, dep_station, arr_station, price, amenities, amenity_keys, warning, is_night, agency_name, bus_id } = req.body;
     if (supabase) {
       const { data: ag } = await (supabase as any).from('agencies').select('id').ilike('name', `%${(agency_name || '').split(' ')[0]}%`).maybeSingle();
       const agency_id = ag?.id || 1;
+      if (bus_id) {
+        const { data: bus } = await (supabase as any)
+          .from('buses')
+          .select('id, agency_id')
+          .eq('id', bus_id)
+          .maybeSingle();
+
+        if (!bus || bus.agency_id !== agency_id) {
+          return res.status(400).json({ error: 'Bus introuvable ou non rattaché à cette agence.' });
+        }
+      }
+      // Calculate the next available ID to bypass out-of-sync Postgres sequences from seed data
+      const { data: maxJourney } = await (supabase as any)
+        .from('journeys')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextId = (maxJourney?.id || 0) + 1;
+
       const { data, error } = await (supabase as any).from('journeys').insert([{
-        agency_id, operator, logo, dep_time, arr_time, duration: duration || '4h15',
+        id: nextId,
+        agency_id, bus_id: bus_id || null, operator, logo, dep_time, arr_time, duration: duration || '4h15',
         dep_station, arr_station, price: price || 0,
         amenities: amenities || [], amenity_keys: amenity_keys || [],
         warning: warning || null, is_night: is_night || false
@@ -273,6 +317,9 @@ export const scanColis = async (req: Request, res: Response) => {
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 };
 
+// In-memory fallback cache for read message IDs when database column is missing
+const readMessagesCache = new Set<number>();
+
 // ============================================================
 // 12. GET /api/agency/messages/:threadId?agency_id=1 — Get messages
 // ============================================================
@@ -283,9 +330,14 @@ export const getMessages = async (req: Request, res: Response) => {
     if (supabase) {
       const { data, error } = await (supabase as any).from('messages').select('*').eq('thread_id', threadId).eq('agency_id', agencyId).order('id');
       if (error) return res.status(500).json({ error: error.message });
-      return res.json(data);
+      const mapped = (data || []).map((m: any) => ({
+        ...m,
+        is_read: m.is_read !== undefined && m.is_read !== null ? m.is_read : readMessagesCache.has(m.id)
+      }));
+      return res.json(mapped);
     }
-    return res.json([]);
+    const list = simMessages[threadId] || [];
+    return res.json(list);
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 };
 
@@ -298,11 +350,23 @@ export const sendMessage = async (req: Request, res: Response) => {
     const { sender, text, time, agency_id } = req.body;
     const aId = agency_id || 1;
     if (supabase) {
-      const { data, error } = await (supabase as any).from('messages').insert([{ agency_id: aId, thread_id: threadId, sender, text, time }]).select().single();
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(201).json(data);
+      let result = await (supabase as any).from('messages').insert([{ agency_id: aId, thread_id: threadId, sender, text, time, is_read: false }]).select().single();
+      
+      if (result.error && result.error.message.includes('is_read')) {
+        console.warn('⚠️ is_read column missing in Supabase messages table, falling back...');
+        result = await (supabase as any).from('messages').insert([{ agency_id: aId, thread_id: threadId, sender, text, time }]).select().single();
+      }
+      
+      if (result.error) return res.status(500).json({ error: result.error.message });
+      return res.status(201).json({
+        ...result.data,
+        is_read: result.data.is_read !== undefined ? result.data.is_read : false
+      });
     }
-    return res.status(201).json({});
+    const list = simMessages[threadId] || [];
+    const newMsg = { id: Date.now(), sender, text, time, is_read: false };
+    simMessages[threadId] = [...list, newMsg];
+    return res.status(201).json(newMsg);
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
 };
 
@@ -380,10 +444,117 @@ export const getAllMessages = async (req: Request, res: Response) => {
       const grouped: { [threadId: string]: any[] } = {};
       (data || []).forEach((m: any) => {
         if (!grouped[m.thread_id]) grouped[m.thread_id] = [];
-        grouped[m.thread_id].push(m);
+        grouped[m.thread_id].push({
+          ...m,
+          is_read: m.is_read !== undefined && m.is_read !== null ? m.is_read : readMessagesCache.has(m.id)
+        });
       });
       return res.json(grouped);
     }
-    return res.json({});
+    return res.json(simMessages);
   } catch (err: any) { return res.status(500).json({ error: err.message }); }
+};
+
+// ============================================================
+// 17. GET /api/agency/journeys/:journeyId/occupied-seats — Get occupied seats
+// ============================================================
+export const getOccupiedSeats = async (req: Request, res: Response) => {
+  try {
+    const journeyId = parseInt(req.params.journeyId, 10);
+    if (supabase) {
+      const { data, error } = await (supabase as any)
+        .from('passengers')
+        .select('seat')
+        .eq('journey_id', journeyId);
+      if (error) return res.status(500).json({ error: error.message });
+      
+      const seats = (data || []).map((p: any) => p.seat).filter(Boolean);
+      return res.json(seats);
+    }
+    return res.json([]);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// ============================================================
+// 18. DELETE /api/agency/journeys/:id — Delete a journey
+// ============================================================
+export const deleteJourney = async (req: Request, res: Response) => {
+  try {
+    const journeyId = parseInt(req.params.id, 10);
+    if (supabase) {
+      // First, delete dependent passengers (if any)
+      await (supabase as any).from('passengers').delete().eq('journey_id', journeyId);
+      
+      const { error } = await (supabase as any)
+        .from('journeys')
+        .delete()
+        .eq('id', journeyId);
+        
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, message: 'Trajet supprimé avec succès.' });
+    }
+    return res.json({ success: false });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+};
+
+// ============================================================
+// 19. PUT /api/agency/messages/:threadId/read — Mark messages as read
+// ============================================================
+export const markMessagesAsRead = async (req: Request, res: Response) => {
+  try {
+    const { threadId } = req.params;
+    const { role } = req.body;
+    const agencyId = parseInt(req.query.agency_id as string, 10) || 1;
+    const targetSender = role === 'agency' ? 'contact' : 'agency';
+    
+    if (supabase) {
+      // 1. Fetch matching messages in thread and add them to our in-memory read messages cache
+      const { data: threadMsgs } = await (supabase as any)
+        .from('messages')
+        .select('id')
+        .eq('thread_id', threadId)
+        .eq('agency_id', agencyId)
+        .eq('sender', targetSender);
+        
+      if (threadMsgs && Array.isArray(threadMsgs)) {
+        threadMsgs.forEach((m: any) => {
+          readMessagesCache.add(m.id);
+        });
+      }
+
+      // 2. Perform DB update (will succeed if the column has been added)
+      const { data, error } = await (supabase as any)
+        .from('messages')
+        .update({ is_read: true })
+        .eq('thread_id', threadId)
+        .eq('agency_id', agencyId)
+        .eq('sender', targetSender)
+        .eq('is_read', false)
+        .select();
+        
+      if (error && error.message.includes('is_read')) {
+        console.warn('⚠️ is_read column missing in Supabase, marked in memory cache instead.');
+        return res.json({ success: true, message: 'Column missing, marked in memory cache instead.' });
+      }
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, count: data?.length || 0 });
+    }
+    
+    if (simMessages[threadId]) {
+      simMessages[threadId] = simMessages[threadId].map((m: any) => {
+        if (m.sender === targetSender) {
+          return { ...m, is_read: true };
+        }
+        return m;
+      });
+    }
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 };

@@ -15,39 +15,42 @@ import {
   sendMessage,
   getProfile,
   updateProfile,
-  getAllMessages
+  getAllMessages,
+  getOccupiedSeats,
+  deleteJourney,
+  markMessagesAsRead
 } from '../controllers/agencyController';
+import { requireAuth } from '../middleware/authMiddleware';
 
 const router = Router();
 
-// Agencies
+// Public routes (no auth required — used by passengers browsing)
 router.get('/agencies', getAgencies);
-
-// Buses
-router.get('/buses', getBuses);
-router.post('/buses', addBus);
-
-// Journeys
-router.get('/journeys', getJourneys);
 router.get('/journeys/all', getAllJourneys);
-router.post('/journeys', createJourney);
+router.get('/journeys', getJourneys);
+router.get('/buses/all', getBuses);
+router.get('/journeys/:journeyId/occupied-seats', getOccupiedSeats);
 
-// Passengers
-router.get('/passengers/:journeyId', getPassengers);
-router.put('/passengers/:journeyId/checkin/:passengerId', checkinPassenger);
-router.put('/passengers/:journeyId/scan/:passengerId', scanPassengerLuggage);
+// Protected routes — agency authentication required
+router.post('/buses', requireAuth, addBus);
+router.get('/buses', requireAuth, getBuses);
 
-// Colis / Baggage
-router.get('/colis', getColis);
-router.put('/colis/:colisId/scan', scanColis);
+router.post('/journeys', requireAuth, createJourney);
+router.delete('/journeys/:id', requireAuth, deleteJourney);
 
-// Messages
-router.get('/all-messages', getAllMessages);
-router.get('/messages/:threadId', getMessages);
-router.post('/messages/:threadId', sendMessage);
+router.get('/passengers/:journeyId', requireAuth, getPassengers);
+router.put('/passengers/:journeyId/checkin/:passengerId', requireAuth, checkinPassenger);
+router.put('/passengers/:journeyId/scan/:passengerId', requireAuth, scanPassengerLuggage);
 
-// Profile
-router.get('/profile', getProfile);
-router.put('/profile', updateProfile);
+router.get('/colis', requireAuth, getColis);
+router.put('/colis/:colisId/scan', requireAuth, scanColis);
+
+router.get('/all-messages', requireAuth, getAllMessages);
+router.get('/messages/:threadId', requireAuth, getMessages);
+router.post('/messages/:threadId', requireAuth, sendMessage);
+router.put('/messages/:threadId/read', requireAuth, markMessagesAsRead);
+
+router.get('/profile', requireAuth, getProfile);
+router.put('/profile', requireAuth, updateProfile);
 
 export default router;

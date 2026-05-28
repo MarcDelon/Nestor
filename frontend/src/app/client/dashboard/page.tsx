@@ -26,68 +26,6 @@ interface Billet {
   busClass: string;
 }
 
-const MOCK_BILLETS: Billet[] = [
-  {
-    id: "ST-2026-FX58",
-    from: "Douala",
-    to: "Yaoundé",
-    company: "Finexs Voyage VIP",
-    companyLogo: "/images/finexs.png",
-    date: "25 Mai 2026",
-    depTime: "06:15",
-    arrTime: "10:30",
-    duration: "4h15",
-    seat: "2B (VIP)",
-    luggageCount: 2,
-    status: "Actif",
-    price: 6000,
-    depStation: "Agence Finexs Douala-Akwa",
-    arrStation: "Agence Finexs Mvan Yaoundé",
-    passenger: "Marc Nzenang",
-    phone: "+237 655 46 26 42",
-    busClass: "VIP"
-  },
-  {
-    id: "ST-2026-BV33",
-    from: "Yaoundé",
-    to: "Bafoussam",
-    company: "Buca Voyage Confort",
-    companyLogo: "/images/bucavoyage.png",
-    date: "18 Avril 2026",
-    depTime: "08:00",
-    arrTime: "12:30",
-    duration: "4h30",
-    seat: "5A",
-    luggageCount: 1,
-    status: "Complété",
-    price: 4500,
-    depStation: "Agence Buca Mvan Yaoundé",
-    arrStation: "Agence Buca Bafoussam Centre",
-    passenger: "Marc Nzenang",
-    phone: "+237 655 46 26 42",
-    busClass: "Confort"
-  },
-  {
-    id: "ST-2026-GE21",
-    from: "Douala",
-    to: "Limbé",
-    company: "General Express",
-    companyLogo: "/images/General.png",
-    date: "05 Mars 2026",
-    depTime: "11:00",
-    arrTime: "13:15",
-    duration: "2h15",
-    seat: "8C",
-    luggageCount: 0,
-    status: "Complété",
-    price: 2500,
-    depStation: "Agence General Express Bessengue",
-    arrStation: "Terminus Limbé",
-    passenger: "Marc Nzenang",
-    phone: "+237 655 46 26 42",
-    busClass: "Classique"
-  }
-];
 
 interface Colis {
   id: string;
@@ -107,63 +45,12 @@ interface Colis {
   notes?: string;
 }
 
-const MOCK_COLIS: Colis[] = [
-  {
-    id: "BAG-2026-FX58-A",
-    label: "Sac de Voyage principal",
-    type: "Sac",
-    weight: 15,
-    color: "Noir",
-    status: "À bord du bus",
-    trip: "Douala → Yaoundé",
-    tripDate: "25 Mai 2026 · 06:15",
-    agency: "Finexs Voyage VIP",
-    agencyLogo: "/images/finexs.png",
-    qrRef: "QR-FX58-A",
-    scannedAt: "25 Mai 2026 à 05:58",
-    dimensions: "55 × 35 × 20 cm",
-    fragile: false,
-    notes: "Étiquette verte fixée"
-  },
-  {
-    id: "BAG-2026-FX58-B",
-    label: "Carton scellé (Restauration)",
-    type: "Carton",
-    weight: 8,
-    color: "Brun",
-    status: "À bord du bus",
-    trip: "Douala → Yaoundé",
-    tripDate: "25 Mai 2026 · 06:15",
-    agency: "Finexs Voyage VIP",
-    agencyLogo: "/images/finexs.png",
-    qrRef: "QR-FX58-B",
-    scannedAt: "25 Mai 2026 à 06:02",
-    dimensions: "40 × 30 × 30 cm",
-    fragile: true,
-    notes: "FRAGILE — Contenu alimentaire"
-  },
-  {
-    id: "BAG-2026-BV33-A",
-    label: "Valise cabine",
-    type: "Valise",
-    weight: 12,
-    color: "Bordeaux",
-    status: "Livré",
-    trip: "Yaoundé → Bafoussam",
-    tripDate: "18 Avril 2026 · 08:00",
-    agency: "Buca Voyage Confort",
-    agencyLogo: "/images/bucavoyage.png",
-    qrRef: "QR-BV33-A",
-    scannedAt: "18 Avril 2026 à 12:28",
-    dimensions: "50 × 40 × 25 cm",
-    fragile: false
-  }
-];
 
 export default function ClientDashboard() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [clientActiveTab, setClientActiveTab] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   // Active Billets and Colis Database states
   const [billetsState, setBilletsState] = useState<Billet[]>([]);
   const [colisState, setColisState] = useState<Colis[]>([]);
@@ -183,6 +70,146 @@ export default function ClientDashboard() {
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isToastSuccess, setIsToastSuccess] = useState(true);
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+
+  // Messenger Database & Interactive States
+  const AGENCIES_FOR_CHATS = [
+    { id: "support", name: "Support SafeTrip", email: "support@safetrip.cm", logo: "/images/logo-removebg-preview (2).png", isSupport: true },
+    { id: "1", name: "Finexs Voyage", email: "finexs@safetrip.cm", logo: "/images/finexs.png" },
+    { id: "2", name: "Buca Voyage", email: "buca@safetrip.cm", logo: "/images/bucavoyage.png" },
+    { id: "3", name: "General Express", email: "general@safetrip.cm", logo: "/images/General.png" },
+    { id: "4", name: "Touristique Express", email: "touristique@safetrip.cm", logo: "/images/Touristique.png" },
+    { id: "5", name: "Men Travel", email: "men@safetrip.cm", logo: "/images/mentravel.png" }
+  ];
+
+  const [chatThreads, setChatThreads] = useState<{ [agencyId: string]: any[] }>({});
+  const [activeThreadId, setActiveThreadId] = useState("support");
+  const [chatInputText, setChatInputText] = useState("");
+  const [emailSearchInput, setEmailSearchInput] = useState("");
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+
+  const fetchMessagesForActiveThread = async (agencyIdStr: string) => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const token = localStorage.getItem("safetrip_token") || "";
+    const authHeaders = { "Authorization": `Bearer ${token}` };
+    const passengerThreadId = email.split("@")[0] || "voyageur";
+
+    const targetThreadId = agencyIdStr === "support" ? "support" : passengerThreadId;
+    const targetAgencyId = agencyIdStr === "support" ? 1 : parseInt(agencyIdStr, 10) || 1;
+
+    try {
+      const res = await fetch(`${apiBase}/api/agency/messages/${targetThreadId}?agency_id=${targetAgencyId}`, { headers: authHeaders });
+      if (res.ok) {
+        const rawMsgs = await res.json();
+        const mapped = rawMsgs.map((m: any) => ({
+          id: m.id,
+          sender: m.sender as "agency" | "contact",
+          text: m.text,
+          time: m.time,
+          isRead: m.is_read
+        }));
+        setChatThreads(prev => ({
+          ...prev,
+          [agencyIdStr]: mapped
+        }));
+      }
+    } catch (err) {
+      console.warn("⚠️ Impossible de charger les messages de la base de données.", err);
+    }
+  };
+
+  const handleSendPassengerMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInputText.trim()) return;
+
+    const timeStr = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const passengerThreadId = email.split("@")[0] || "voyageur";
+    const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
+    const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
+
+    const newMsg = {
+      id: Date.now(),
+      sender: "contact" as const,
+      text: chatInputText,
+      time: timeStr
+    };
+
+    setChatThreads(prev => ({
+      ...prev,
+      [activeThreadId]: [...(prev[activeThreadId] || []), newMsg]
+    }));
+    setChatInputText("");
+
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const token = localStorage.getItem("safetrip_token") || "";
+    try {
+      await fetch(`${apiBase}/api/agency/messages/${targetThreadId}`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          sender: "contact",
+          text: chatInputText,
+          time: timeStr,
+          agency_id: targetAgencyId
+        })
+      });
+    } catch (err) {
+      console.warn("⚠️ Impossible d'envoyer le message au serveur.", err);
+    }
+  };
+
+  // Load & poll messages for active chat thread in real-time
+  useEffect(() => {
+    if (clientActiveTab !== "messageries" || !email) return;
+
+    fetchMessagesForActiveThread(activeThreadId);
+
+    const interval = setInterval(() => {
+      fetchMessagesForActiveThread(activeThreadId);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [clientActiveTab, activeThreadId, email]);
+
+  // Sync marking agency messages as read
+  useEffect(() => {
+    if (clientActiveTab !== "messageries" || !email || !activeThreadId) return;
+    
+    const markAsRead = async () => {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const token = localStorage.getItem("safetrip_token") || "";
+      const passengerThreadId = email.split("@")[0] || "voyageur";
+      const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
+      const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
+      
+      try {
+        await fetch(`${apiBase}/api/agency/messages/${targetThreadId}/read?agency_id=${targetAgencyId}`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ role: "contact" })
+        });
+      } catch (err) {
+        console.warn("⚠️ Error marking messages as read:", err);
+      }
+    };
+    
+    markAsRead();
+  }, [clientActiveTab, activeThreadId, email, chatThreads[activeThreadId]?.length]);
+
+  // Load loyalty points on client side to avoid SSR hydration mismatch
+  useEffect(() => {
+    try {
+      const storedPoints = parseInt(localStorage.getItem("safetrip_loyalty_points") || "0", 10);
+      const completedTickets = billetsState.filter(b => b.status === "Complété");
+      setLoyaltyPoints(Math.max(storedPoints, completedTickets.length * 50));
+    } catch { /* ignore */ }
+  }, [billetsState]);
 
   // Security Check and state loading
   useEffect(() => {
@@ -217,39 +244,38 @@ export default function ClientDashboard() {
       }
     }
 
-    // Hydrate tickets and package tracking from API (isolated fetches)
+    // Hydrate tickets and package tracking from API
     const hydrateClientData = async () => {
       const clientId = localStorage.getItem("safetrip_user_id") || "client-uuid-1";
+      const token = localStorage.getItem("safetrip_token") || "";
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const authHeaders = { "Authorization": `Bearer ${token}` };
 
-      // 1. Fetch billets (isolated — failure here does not affect colis)
+      // 1. Fetch billets from API
       try {
-        const billetsRes = await fetch(`http://localhost:5000/api/client/billets?client_id=${clientId}`);
+        const billetsRes = await fetch(`${apiBase}/api/client/billets?client_id=${clientId}`, { headers: authHeaders });
         if (billetsRes.ok) {
-          const data = await billetsRes.json();
-          // Even if data is [], it means the account has no bookings yet — this is correct DB state
-          setBilletsState(data);
+          const apiData: Billet[] = await billetsRes.json();
+          setBilletsState(apiData);
         } else {
-          console.warn("⚠️ API billets a renvoyé une erreur.");
           setBilletsState([]);
         }
       } catch (err) {
-        console.warn("⚠️ API billets non joignable.", err);
+        console.error("⚠️ Error fetching billets from Supabase:", err);
         setBilletsState([]);
       }
 
-      // 2. Fetch colis (isolated — failure here does not affect billets)
+      // 2. Fetch colis from API
       try {
-        const colisRes = await fetch(`http://localhost:5000/api/client/colis?client_id=${clientId}`);
+        const colisRes = await fetch(`${apiBase}/api/client/colis?client_id=${clientId}`, { headers: authHeaders });
         if (colisRes.ok) {
-          const data = await colisRes.json();
-          // Even if data is [], it means no packages registered yet — correct DB state
-          setColisState(data);
+          const apiData: Colis[] = await colisRes.json();
+          setColisState(apiData);
         } else {
-          console.warn("⚠️ API colis a renvoyé une erreur.");
           setColisState([]);
         }
       } catch (err) {
-        console.warn("⚠️ API colis non joignable.", err);
+        console.error("⚠️ Error fetching colis from Supabase:", err);
         setColisState([]);
       }
     };
@@ -300,6 +326,22 @@ export default function ClientDashboard() {
         {bars}
       </div>
     );
+  };
+
+  const getLuggageQrPayload = (colis: Colis) => {
+    return JSON.stringify({
+      app: "SafeTrip",
+      type: "luggage",
+      luggageId: colis.id,
+      qrRef: colis.qrRef,
+      traveler: profileFullName || email.split("@")[0] || "Voyageur SafeTrip",
+      trip: colis.trip,
+      status: colis.status
+    });
+  };
+
+  const getLuggageQrUrl = (colis: Colis, size = 180) => {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=10&data=${encodeURIComponent(getLuggageQrPayload(colis))}`;
   };
 
   const handleDownloadPDF = async (billet: Billet) => {
@@ -406,87 +448,92 @@ export default function ClientDashboard() {
       const html2canvas = (await import("html2canvas")).default;
 
       const pdfDiv = document.createElement("div");
-      pdfDiv.style.cssText = "position: fixed; top: -9999px; left: -9999px; width: 380px; min-height: 600px; background: #ffffff; font-family: Arial, sans-serif; color: #1a202c; padding: 0; margin: 0; border: 2px solid #1a202c;";
+      pdfDiv.style.cssText = "position: fixed; top: -9999px; left: -9999px; width: 420px; min-height: 640px; background: #F3F7F4; font-family: Arial, sans-serif; color: #1a202c; padding: 0; margin: 0;";
       
-      let seed = 0;
-      for (let i = 0; i < colis.id.length; i++) {
-        seed += colis.id.charCodeAt(i);
-      }
-      let barcodeHtml = "";
-      for (let i = 0; i < 40; i++) {
-        const width = ((seed + i) % 4) + 1.5;
-        const isGap = (seed * i + 7) % 3 === 0;
-        const marginRight = isGap ? (((seed + i) % 2) + 2) + "px" : "1px";
-        barcodeHtml += '<div style="width:' + width + 'px; background:#000000; margin-right:' + marginRight + '; flex-shrink:0;"></div>';
-      }
-
+      const qrUrl = getLuggageQrUrl(colis, 180);
       const dimensionsRow = colis.dimensions ? '<tr><td style="padding: 6px 0; color: #718096;">DIMENSIONS</td><td style="padding: 6px 0; font-weight: bold; color: #1a202c; text-align: right;">' + colis.dimensions + '</td></tr>' : '';
       const fragileRow = colis.fragile ? '<tr><td style="padding: 6px 0; color: #ef4444; font-weight: 900;">ATTENTION</td><td style="padding: 6px 0; font-weight: 900; color: #ef4444; text-align: right; letter-spacing: 0.5px;">⚠️ BAGAGE FRAGILE</td></tr>' : '';
 
       pdfDiv.innerHTML = `
-        <div style="width: 380px; padding: 0; margin: 0; box-sizing: border-box; background: #ffffff; text-align: center; border-radius: 12px; overflow: hidden; position: relative;">
-          <div style="display: flex; height: 6px;">
+        <div style="width: 420px; padding: 14px; margin: 0; box-sizing: border-box; background: #F3F7F4;">
+        <div style="background: #ffffff; border: 2px solid #0A2F1D; border-radius: 26px; overflow: hidden; text-align: center; box-shadow: 0 16px 40px rgba(10,47,29,0.14); position: relative;">
+          <div style="display: flex; height: 7px;">
             <div style="flex: 1; background: #007A5E;"></div>
             <div style="flex: 1; background: #CE1126;"></div>
             <div style="flex: 1; background: #FCD116;"></div>
           </div>
-          <div style="display: flex; justify-content: center; padding: 15px 0 10px 0;">
-            <div style="width: 16px; height: 16px; border-radius: 50%; border: 3px double #a0aec0; background: #ffffff;"></div>
+          <div style="display: flex; justify-content: center; padding: 14px 0 10px 0; background: #F8FBF9;">
+            <div style="width: 15px; height: 15px; border-radius: 50%; border: 3px solid #CBD5E0; background: #ffffff; box-shadow: inset 0 0 0 3px #F8FBF9;"></div>
           </div>
-          <div style="background: #0A2F1D; color: #ffffff; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center;">
-            <div style="font-weight: 900; font-size: 14px; letter-spacing: -0.5px;">SafeTrip</div>
-            <div style="background: rgba(255,255,255,0.15); border-radius: 6px; padding: 3px 8px; font-size: 10px; font-weight: bold;">
-              \${colis.agency}
+          <div style="background: linear-gradient(135deg,#062718 0%,#0A2F1D 45%,#00673C 100%); color: #ffffff; padding: 18px 22px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="text-align: left;">
+              <div style="font-weight: 900; font-size: 20px; letter-spacing: -1px;">SafeTrip</div>
+              <div style="font-size: 8px; color: rgba(255,255,255,0.68); letter-spacing: 1.5px; text-transform: uppercase;">Luggage ID Card</div>
+            </div>
+            <div style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 11px; font-size: 10px; font-weight: bold; max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${colis.agency}
             </div>
           </div>
-          <div style="padding: 15px 20px 5px 20px; text-align: left;">
-            <span style="font-size: 8px; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 2px;">Document Officiel</span>
-            <span style="font-size: 16px; font-weight: 900; color: #0A2F1D; text-transform: uppercase; letter-spacing: 0.5px;">ÉTIQUETTE BAGAGE</span>
+          <div style="padding: 20px 22px 8px 22px; text-align: left;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+              <div>
+                <span style="font-size: 8px; color: #94A3B8; text-transform: uppercase; letter-spacing: 1.4px; display: block; margin-bottom: 4px; font-weight: 800;">Document officiel</span>
+                <span style="font-size: 21px; font-weight: 950; color: #0A2F1D; text-transform: uppercase; letter-spacing: 0.2px; line-height: 1;">Étiquette Bagage</span>
+              </div>
+              <div style="background: #EAF7F1; color: #00673C; border: 1px solid #BFE8D4; border-radius: 999px; padding: 6px 9px; font-size: 8px; font-weight: 900; white-space: nowrap;">À COLLER</div>
+            </div>
           </div>
-          <div style="border-bottom: 2px dashed #cbd5e0; margin: 10px 20px;"></div>
-          <div style="padding: 5px 20px; text-align: left;">
+          <div style="border-bottom: 2px dashed #CBD5E0; margin: 12px 22px;"></div>
+          <div style="padding: 0 22px 8px 22px; text-align: left;">
+            <div style="background: #F8FBF9; border: 1px solid #E2E8F0; border-radius: 18px; padding: 10px 14px;">
             <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
               <tr>
-                <td style="padding: 6px 0; color: #718096; width: 45%;">RÉFÉRENCE</td>
-                <td style="padding: 6px 0; font-weight: bold; color: #00673C; text-align: right;">\${colis.id}</td>
+                <td style="padding: 7px 0; color: #64748B; width: 43%; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">RÉFÉRENCE</td>
+                <td style="padding: 7px 0; font-weight: 900; color: #00673C; text-align: right; font-size: 12px;">${colis.id}</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0; color: #718096;">VOYAGEUR</td>
-                <td style="padding: 6px 0; font-weight: bold; color: #1a202c; text-align: right;">Marc Nzenang</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">VOYAGEUR</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${profileFullName || email.split("@")[0] || "Voyageur SafeTrip"}</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0; color: #718096;">TRAJET</td>
-                <td style="padding: 6px 0; font-weight: bold; color: #1a202c; text-align: right;">\${colis.trip}</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">TRAJET</td>
+                <td style="padding: 7px 0; font-weight: 900; color: #0A2F1D; text-align: right;">${colis.trip}</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0; color: #718096;">DATE DE DÉPART</td>
-                <td style="padding: 6px 0; font-weight: bold; color: #1a202c; text-align: right;">\${colis.tripDate.split(" · ")[0]}</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">DATE DE DÉPART</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${colis.tripDate.split(" · ")[0]}</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0; color: #718096;">TYPE D'OBJET</td>
-                <td style="padding: 6px 0; font-weight: bold; color: #1a202c; text-align: right;">\${colis.type} (\${colis.color})</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">TYPE D'OBJET</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${colis.type} (${colis.color})</td>
               </tr>
               <tr>
-                <td style="padding: 6px 0; color: #718096;">POIDS ENREGISTRÉ</td>
-                <td style="padding: 6px 0; font-weight: 800; color: #00673C; text-align: right; font-size: 12px;">\${colis.weight} KG</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">POIDS ENREGISTRÉ</td>
+                <td style="padding: 7px 0; font-weight: 950; color: #00673C; text-align: right; font-size: 14px;">${colis.weight} KG</td>
               </tr>
-              \${dimensionsRow}
-              \${fragileRow}
+              ${dimensionsRow}
+              ${fragileRow}
             </table>
-          </div>
-          <div style="border-bottom: 2px dashed #cbd5e0; margin: 15px 20px;"></div>
-          <div style="padding: 10px 20px 25px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <div style="display: flex; height: 35px; justify-content: center; width: 100%;">
-              \${barcodeHtml}
-            </div>
-            <div style="font-family: monospace; font-size: 10px; font-weight: bold; color: #4a5568; letter-spacing: 3px;">
-              \${colis.qrRef}
             </div>
           </div>
-          <div style="background: #fafafa; padding: 12px 20px; font-size: 8px; color: #a0aec0; border-top: 1px solid #edf2f7; text-align: center;">
-            SafeTrip © 2026 — Bagage Enregistré Officiel.<br/>
-            Scannez ce code-barres lors de la dépose et de la livraison.
+          <div style="border-bottom: 2px dashed #CBD5E0; margin: 12px 22px;"></div>
+          <div style="padding: 8px 22px 24px 22px; display: flex; flex-direction: column; align-items: center; gap: 9px;">
+            <div style="font-size: 8px; color: #64748B; text-transform: uppercase; letter-spacing: 1.3px; font-weight: 900;">Scan perte / restitution</div>
+            <div style="background: #ffffff; border: 3px solid #0A2F1D; border-radius: 18px; padding: 13px; box-shadow: 0 10px 22px rgba(10,47,29,0.12);">
+              <img src="${qrUrl}" alt="QR Code bagage SafeTrip" style="width: 164px; height: 164px; display: block;" />
+            </div>
+            <div style="font-family: monospace; font-size: 11px; font-weight: 900; color: #0A2F1D; letter-spacing: 3px;">
+              ${colis.qrRef}
+            </div>
+            <div style="font-size: 9px; color: #64748B; max-width: 280px; line-height: 1.45; background: #F8FBF9; border-radius: 999px; padding: 7px 12px;">
+              À scanner en cas de perte pour retrouver l'identité du bagage.
+            </div>
           </div>
+          <div style="background: #0A2F1D; padding: 14px 20px; font-size: 8px; color: rgba(255,255,255,0.72); border-top: 1px solid rgba(255,255,255,0.12); text-align: center; line-height: 1.45;">
+            <strong style="color:#FCD116;">SafeTrip © 2026</strong> — Bagage enregistré officiel.<br/>
+            Ce ticket doit rester visible et collé au bagage pendant tout le trajet.
+          </div>
+        </div>
         </div>
       `;
       
@@ -561,11 +608,13 @@ export default function ClientDashboard() {
   const nextTrip = activeTickets[0];
   const nextTripText = nextTrip ? `Le ${nextTrip.date} · ${nextTrip.depTime}` : "Aucun voyage prévu";
 
-  // Points de fidélité basés sur les voyages complétés
   const completedTickets = billetsState.filter(b => b.status === "Complété");
   const completedCount = completedTickets.length;
-  const loyaltyPoints = completedCount * 50; // 50 points par voyage complété
   const loyaltyStatus = loyaltyPoints < 100 ? "Statut Bronze" : loyaltyPoints < 300 ? "Statut Argent" : "Statut Or";
+  const nextLevelPoints = loyaltyPoints < 100 ? 100 : loyaltyPoints < 300 ? 300 : null;
+  const loyaltyProgressPct = nextLevelPoints
+    ? Math.min(100, Math.round((loyaltyPoints / nextLevelPoints) * 100))
+    : 100;
 
   // Bagages et colis
   const totalColisCount = colisState.length;
@@ -586,8 +635,19 @@ export default function ClientDashboard() {
         </div>
       )}
 
+      <div className={styles.mobileTopBar}>
+        <button type="button" onClick={() => setSidebarOpen(o => !o)} className={styles.mobileMenuBtn}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:22,height:22}}>
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+        <img src="/images/logo-removebg-preview (2).png" alt="SafeTrip" style={{height:36,objectFit:"contain"}} />
+        <div style={{width:34}} />
+      </div>
+      {sidebarOpen && <div className={styles.sidebarOverlay} onClick={() => setSidebarOpen(false)} />}
+
       {/* 1. VERTICAL SIDEBAR */}
-      <aside className={styles.clientSidebar}>
+      <aside className={sidebarOpen ? `${styles.clientSidebar} ${styles.sidebarOpen}` : styles.clientSidebar}>
         <div className={styles.sidebarBrand}>
           <img src="/images/logo-removebg-preview (2).png" alt="Logo" className={styles.sidebarLogoImg} />
         </div>
@@ -626,10 +686,23 @@ export default function ClientDashboard() {
             onClick={() => setClientActiveTab("colis")}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            Colis
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.sidebarNavItem} ${clientActiveTab === "bagages" ? styles.sidebarNavItemActive : ""}`}
+            onClick={() => setClientActiveTab("bagages")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
               <rect x="2" y="7" width="20" height="14" rx="2" />
               <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
             </svg>
-            Colis
+            Bagages
           </button>
 
           <button
@@ -724,7 +797,13 @@ export default function ClientDashboard() {
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Points Fidélité</span>
                   <span className={styles.statValue}>{loyaltyPoints} pts</span>
-                  <span className={styles.statTrend} style={{ color: "#744210" }}>{loyaltyStatus}</span>
+                  <span className={styles.statTrend} style={{ color: "#744210" }}>
+                    {loyaltyStatus}
+                    {nextLevelPoints && ` · ${nextLevelPoints - loyaltyPoints} pts jusqu'au niveau suivant`}
+                  </span>
+                  <div style={{ width: "100%", height: "4px", background: "rgba(200,148,30,0.15)", borderRadius: "4px", marginTop: "6px" }}>
+                    <div style={{ width: `${loyaltyProgressPct}%`, height: "100%", background: "var(--accent-gold, #C8941E)", borderRadius: "4px", transition: "width 0.6s ease" }} />
+                  </div>
                 </div>
               </div>
 
@@ -970,85 +1049,187 @@ export default function ClientDashboard() {
             <div className={styles.billetPageHeader}>
               <div>
                 <h2 className={styles.billetPageTitle} style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"18px",height:"18px",color:"#00673C"}}><rect x="3" y="6" width="18" height="14" rx="2" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                  Suivi de mes Colis &amp; Bagages
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"18px",height:"18px",color:"#00673C"}}>
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                  </svg>
+                  Suivi de mes Colis et Expéditions
                 </h2>
-                <p className={styles.billetPageSub}>{colisState.length} article{colisState.length > 1 ? "s" : ""} enregistré{colisState.length > 1 ? "s" : ""}</p>
+                <p className={styles.billetPageSub}>{colisState.filter(c => c.type === "Colis" || c.type === "Carton").length} colis enregistré{colisState.filter(c => c.type === "Colis" || c.type === "Carton").length > 1 ? "s" : ""}</p>
               </div>
             </div>
 
             <div className={styles.billetList}>
-              {colisState.map((colis) => {
-                const isActive = colis.status === "À bord du bus" || colis.status === "En transit" || colis.status === "Scanné en gare";
-                const isDelivered = colis.status === "Livré";
-                const isPending = colis.status === "En attente de scan";
-                return (
-                  <div key={colis.id} className={styles.billetCard}>
-                    <div className={`${styles.billetStripe} ${isActive ? styles.billetStripeActive : isDelivered ? styles.colisStripeDelivered : isPending ? styles.colisStripePending : styles.billetStripeCompleted}`} />
+              {colisState.filter(c => c.type === "Colis" || c.type === "Carton").length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", color: "rgba(0,0,0,0.4)", fontSize: "0.85rem", background: "rgba(0,0,0,0.02)", borderRadius: "12px", border: "1px dashed rgba(0,0,0,0.05)" }}>
+                  Aucun colis enregistré pour le moment.
+                </div>
+              ) : (
+                colisState.filter(c => c.type === "Colis" || c.type === "Carton").map((colis) => {
+                  const isActive = colis.status === "À bord du bus" || colis.status === "En transit" || colis.status === "Scanné en gare";
+                  const isDelivered = colis.status === "Livré";
+                  const isPending = colis.status === "En attente de scan";
+                  return (
+                    <div key={colis.id} className={styles.billetCard}>
+                      <div className={`${styles.billetStripe} ${isActive ? styles.billetStripeActive : isDelivered ? styles.colisStripeDelivered : isPending ? styles.colisStripePending : styles.billetStripeCompleted}`} />
 
-                    <div className={styles.billetCardBody}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <div className={styles.colisTypeIcon}>
-                          {colis.type === "Valise" ? (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
-                          ) : colis.type === "Sac" ? (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                          ) : colis.type === "Carton" ? (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                          ) : (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M19 8V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/></svg>
+                      <div className={styles.billetCardBody}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div className={styles.colisTypeIcon}>
+                            {colis.type === "Carton" ? (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                            ) : (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M19 8V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/></svg>
+                            )}
+                          </div>
+                          <div>
+                            <div className={styles.colisLabel}>{colis.label}</div>
+                            <div className={styles.colisType}>{colis.type} · {colis.color}</div>
+                          </div>
+                          {colis.fragile && (
+                            <span className={styles.fragileBadge}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:"10px",height:"10px"}}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                              FRAGILE
+                            </span>
                           )}
                         </div>
-                        <div>
-                          <div className={styles.colisLabel}>{colis.label}</div>
-                          <div className={styles.colisType}>{colis.type} · {colis.color}</div>
-                        </div>
-                        {colis.fragile && (
-                          <span className={styles.fragileBadge}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:"10px",height:"10px"}}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                            FRAGILE
-                          </span>
-                        )}
-                      </div>
 
-                      <div className={styles.billetMeta}>
-                        <span className={styles.billetMetaItem}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                          {colis.weight} kg
-                        </span>
-                        {colis.dimensions && (
+                        <div className={styles.billetMeta}>
                           <span className={styles.billetMetaItem}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-                            {colis.dimensions}
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {colis.weight} kg
                           </span>
-                        )}
-                        <span className={styles.billetMetaItem}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                          Voyage : {colis.trip}
+                          {colis.dimensions && (
+                            <span className={styles.billetMetaItem}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                              {colis.dimensions}
+                            </span>
+                          )}
+                          <span className={styles.billetMetaItem}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                            Voyage : {colis.trip}
+                          </span>
+                          <span className={styles.billetMetaItem}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Départ : {colis.tripDate.split(" · ")[0]}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={styles.billetCardRight}>
+                        <div className={styles.colisRef}>{colis.id}</div>
+                        <span className={`${styles.billetStatus} ${isActive ? styles.billetStatusActive : isDelivered ? styles.colisStatusDelivered : styles.billetStatusCompleted}`}>
+                          {isActive ? "En cours" : isDelivered ? "Livré" : "En attente"}
                         </span>
-                        <span className={styles.billetMetaItem}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                          Départ : {colis.tripDate.split(" · ")[0]}
-                        </span>
+                        <button
+                          className={styles.voirBilletBtn}
+                          onClick={() => setSelectedColis(colis)}
+                        >
+                          Suivre le colis
+                        </button>
                       </div>
                     </div>
-
-                    <div className={styles.billetCardRight}>
-                      <div className={styles.colisRef}>{colis.id}</div>
-                      <span className={`${styles.billetStatus} ${isActive ? styles.billetStatusActive : isDelivered ? styles.colisStatusDelivered : styles.billetStatusCompleted}`}>
-                        {isActive ? "En cours" : isDelivered ? "Livré" : "En attente"}
-                      </span>
-                      <button
-                        className={styles.voirBilletBtn}
-                        onClick={() => setSelectedColis(colis)}
-                      >
-                        Suivre le bagage
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
+          </div>
+        )}
+
+        {clientActiveTab === "bagages" && (
+          <div className={styles.tabContentFadeIn}>
+            <div className={styles.billetPageHeader}>
+              <div>
+                <h2 className={styles.billetPageTitle} style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"18px",height:"18px",color:"#00673C"}}>
+                    <rect x="2" y="7" width="20" height="14" rx="2" />
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                  </svg>
+                  Suivi de mes Bagages de Voyage
+                </h2>
+                <p className={styles.billetPageSub}>{colisState.filter(c => c.type === "Valise" || c.type === "Sac" || c.type === "Sac à dos").length} bagage{colisState.filter(c => c.type === "Valise" || c.type === "Sac" || c.type === "Sac à dos").length > 1 ? "s" : ""} enregistré{colisState.filter(c => c.type === "Valise" || c.type === "Sac" || c.type === "Sac à dos").length > 1 ? "s" : ""}</p>
+              </div>
+            </div>
+
+            <div className={styles.billetList}>
+              {colisState.filter(c => c.type === "Valise" || c.type === "Sac" || c.type === "Sac à dos").length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", color: "rgba(0,0,0,0.4)", fontSize: "0.85rem", background: "rgba(0,0,0,0.02)", borderRadius: "12px", border: "1px dashed rgba(0,0,0,0.05)" }}>
+                  Aucun bagage enregistré sur vos trajets en cours.
+                </div>
+              ) : (
+                colisState.filter(c => c.type === "Valise" || c.type === "Sac" || c.type === "Sac à dos").map((colis) => {
+                  const isActive = colis.status === "À bord du bus" || colis.status === "En transit" || colis.status === "Scanné en gare";
+                  const isDelivered = colis.status === "Livré";
+                  const isPending = colis.status === "En attente de scan";
+                  return (
+                    <div key={colis.id} className={styles.billetCard}>
+                      <div className={`${styles.billetStripe} ${isActive ? styles.billetStripeActive : isDelivered ? styles.colisStripeDelivered : isPending ? styles.colisStripePending : styles.billetStripeCompleted}`} />
+
+                      <div className={styles.billetCardBody}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <div className={styles.colisTypeIcon}>
+                            {colis.type === "Valise" ? (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                            ) : colis.type === "Sac" ? (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                            ) : (
+                              <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"20px",height:"20px"}}><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M19 8V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v2"/></svg>
+                            )}
+                          </div>
+                          <div>
+                            <div className={styles.colisLabel}>{colis.label}</div>
+                            <div className={styles.colisType}>{colis.type} · {colis.color}</div>
+                          </div>
+                          {colis.fragile && (
+                            <span className={styles.fragileBadge}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:"10px",height:"10px"}}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                              FRAGILE
+                            </span>
+                          )}
+                        </div>
+
+                        <div className={styles.billetMeta}>
+                          <span className={styles.billetMetaItem}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {colis.weight} kg
+                          </span>
+                          {colis.dimensions && (
+                            <span className={styles.billetMetaItem}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                              {colis.dimensions}
+                            </span>
+                          )}
+                          <span className={styles.billetMetaItem}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                            Voyage : {colis.trip}
+                          </span>
+                          <span className={styles.billetMetaItem}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            Départ : {colis.tripDate.split(" · ")[0]}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={styles.billetCardRight}>
+                        <div className={styles.colisRef}>{colis.id}</div>
+                        <span className={`${styles.billetStatus} ${isActive ? styles.billetStatusActive : isDelivered ? styles.colisStatusDelivered : styles.billetStatusCompleted}`}>
+                          {isActive ? "En cours" : isDelivered ? "Livré" : "En attente"}
+                        </span>
+                        <button
+                          className={styles.voirBilletBtn}
+                          onClick={() => setSelectedColis(colis)}
+                        >
+                          Suivre le bagage
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
 
             {selectedColis && (
               <div className={styles.billetModalOverlay} onClick={() => setSelectedColis(null)}>
@@ -1069,7 +1250,7 @@ export default function ClientDashboard() {
                           <polyline points="7 10 12 15 17 10"/>
                           <line x1="12" y1="15" x2="12" y2="3"/>
                         </svg>
-                        PDF
+                        Télécharger PDF
                       </button>
                       <button className={styles.billetModalClose} onClick={() => setSelectedColis(null)}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1119,7 +1300,7 @@ export default function ClientDashboard() {
                       <div className={styles.dlDetailsGrid}>
                         <div className={styles.dlDetailItem}>
                           <span className={styles.dlDetailLabel}>Voyageur</span>
-                          <span className={styles.dlDetailValue}>Marc Nzenang</span>
+                          <span className={styles.dlDetailValue}>{profileFullName || email.split("@")[0] || "Voyageur SafeTrip"}</span>
                         </div>
                         <div className={styles.dlDetailItem}>
                           <span className={styles.dlDetailLabel}>Date départ</span>
@@ -1166,8 +1347,22 @@ export default function ClientDashboard() {
 
                     <div className={styles.dlFooter}>
                       <div className={styles.dlBarcodeContainer}>
-                        {renderBarcode(selectedColis.id)}
+                        <img
+                          src={getLuggageQrUrl(selectedColis, 180)}
+                          alt={`QR code du bagage ${selectedColis.id}`}
+                          style={{
+                            width: "96px",
+                            height: "96px",
+                            background: "#ffffff",
+                            padding: "6px",
+                            borderRadius: "10px",
+                            border: "1px solid rgba(10,47,29,0.18)"
+                          }}
+                        />
                         <span className={styles.dlBarcodeText}>{selectedColis.qrRef}</span>
+                        <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.65)", textAlign: "center", maxWidth: "190px", lineHeight: 1.3 }}>
+                          Scanner ce QR code en cas de perte du bagage
+                        </span>
                       </div>
                       
                       <div className={styles.dlStatusRow}>
@@ -1183,59 +1378,319 @@ export default function ClientDashboard() {
                     </div>
                   </div>
 
-                  <div className={styles.colisTimeline} style={{ background: "rgba(255,255,255,0.02)", padding: "18px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div className={styles.colisTimelineTitle} style={{ color: "#ffffff", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "8px", marginBottom: "12px" }}>
-                      Historique des Scans de Sécurité
-                    </div>
-                    {["En attente de scan", "Scanné en gare", "En transit", "À bord du bus", "Livré"].map((step, i) => {
-                      const steps = ["En attente de scan", "Scanné en gare", "En transit", "À bord du bus", "Livré"];
-                      const currentIdx = steps.indexOf(selectedColis.status);
-                      const isDone = i <= currentIdx;
-                      const isCurrent = i === currentIdx;
-                      return (
-                        <div key={step} className={styles.colisTimelineStep}>
-                          <div className={styles.colisTimelineLeft}>
-                            <div className={`${styles.colisTimelineDot} ${isDone ? styles.colisTimelineDotDone : ""} ${isCurrent ? styles.colisTimelineDotCurrent : ""}`} style={{ fontSize: "10px" }}>
-                              {isDone && !isCurrent ? (
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{width:"8px",height:"8px"}}><polyline points="20 6 9 17 4 12"/></svg>
-                              ) : isCurrent ? (
-                                <div style={{width:"4px",height:"4px",borderRadius:"50%",background:"#ffffff"}}/>
-                              ) : ""}
+                </div>
+              </div>
+            )}
+
+        {clientActiveTab === "messageries" && (
+          <div className={styles.tabContentFadeIn}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "280px 1fr",
+              background: "#ffffff",
+              borderRadius: "20px",
+              border: "1px solid #edf2f7",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.04)",
+              minHeight: "550px",
+              maxHeight: "650px",
+              overflow: "hidden"
+            }}>
+              {/* Left Side: Thread List & Email Search Combobox */}
+              <div style={{
+                borderRight: "1px solid #edf2f7",
+                display: "flex",
+                flexDirection: "column",
+                background: "#fcfdfe",
+                position: "relative"
+              }}>
+                <div style={{
+                  padding: "16px",
+                  borderBottom: "1px solid #edf2f7",
+                  fontWeight: 800,
+                  fontSize: "0.9rem",
+                  color: "#0A2F1D",
+                  background: "rgba(0,103,60,0.03)"
+                }}>
+                  Discussions SafeTrip
+                </div>
+
+                {/* Email Search Combobox */}
+                <div style={{ padding: "12px", borderBottom: "1px solid #edf2f7", position: "relative" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "8px 12px", position: "relative" }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#718096" strokeWidth="2.5" style={{ width: "14px", height: "14px" }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                    <input 
+                      type="text" 
+                      placeholder="Contacter une agence..." 
+                      value={emailSearchInput}
+                      onChange={(e) => {
+                        setEmailSearchInput(e.target.value);
+                        setShowEmailSuggestions(true);
+                      }}
+                      onFocus={() => setShowEmailSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowEmailSuggestions(false), 200)}
+                      style={{ border: "none", outline: "none", width: "100%", fontSize: "0.8rem", fontWeight: 700, color: "#1a202c" }}
+                    />
+                  </div>
+
+                  {showEmailSuggestions && emailSearchInput.trim() && (
+                    <div style={{
+                      position: "absolute",
+                      top: "100%",
+                      left: "12px",
+                      right: "12px",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "10px",
+                      boxShadow: "0 10px 25px rgba(0,0,0,0.08)",
+                      zIndex: 1000,
+                      maxHeight: "180px",
+                      overflowY: "auto",
+                      marginTop: "6px",
+                      padding: "4px"
+                    }}>
+                      {AGENCIES_FOR_CHATS.filter(a => 
+                        a.email.toLowerCase().includes(emailSearchInput.toLowerCase()) || 
+                        a.name.toLowerCase().includes(emailSearchInput.toLowerCase())
+                      ).length === 0 ? (
+                        <div style={{ padding: "10px", fontSize: "0.75rem", color: "#a0aec0", fontStyle: "italic" }}>Aucune agence trouvée</div>
+                      ) : (
+                        AGENCIES_FOR_CHATS
+                          .filter(a => 
+                            a.email.toLowerCase().includes(emailSearchInput.toLowerCase()) || 
+                            a.name.toLowerCase().includes(emailSearchInput.toLowerCase())
+                          )
+                          .map(agency => (
+                            <div
+                              key={agency.id}
+                              onMouseDown={() => {
+                                setActiveThreadId(agency.id);
+                                setEmailSearchInput("");
+                                setShowEmailSuggestions(false);
+                                showToast(`Discussion ouverte avec ${agency.name}`);
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease"
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(0,103,60,0.05)"}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                            >
+                              <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "#f7fafc", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #edf2f7", padding: "3px" }}>
+                                <img src={agency.logo} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#1a202c" }}>{agency.name}</div>
+                                <div style={{ fontSize: "0.62rem", color: "#718096", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agency.email}</div>
+                              </div>
                             </div>
-                            {i < 4 && <div className={`${styles.colisTimelineConnector} ${i < currentIdx ? styles.colisTimelineConnectorDone : ""}`} />}
+                          ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Chat Threads list */}
+                <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
+                  {AGENCIES_FOR_CHATS.map(contact => {
+                    const isActive = activeThreadId === contact.id;
+                    const threadMsgs = chatThreads[contact.id] || [];
+                    const lastMsg = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1].text : "Commencez à discuter...";
+                    const lastMsgTime = threadMsgs.length > 0 ? threadMsgs[threadMsgs.length - 1].time : "12:00";
+                    return (
+                      <div
+                        key={contact.id}
+                        onClick={() => setActiveThreadId(contact.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 12px",
+                          borderRadius: "12px",
+                          cursor: "pointer",
+                          marginBottom: "4px",
+                          transition: "all 0.2s ease",
+                          background: isActive ? "rgba(0,103,60,0.08)" : "transparent"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) e.currentTarget.style.backgroundColor = "rgba(0,103,60,0.03)";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) e.currentTarget.style.backgroundColor = "transparent";
+                        }}
+                      >
+                        <div style={{
+                          width: "36px",
+                          height: "36px",
+                          borderRadius: "50%",
+                          background: "#ffffff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          border: isActive ? "2px solid #00673C" : "1px solid #edf2f7",
+                          padding: "4px",
+                          flexShrink: 0
+                        }}>
+                          <img src={contact.logo} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                            <span style={{ fontSize: "0.8rem", fontWeight: 800, color: isActive ? "#0A2F1D" : "#1a202c", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{contact.name}</span>
+                            <span style={{ fontSize: "0.6rem", color: "#a0aec0" }}>{lastMsgTime}</span>
                           </div>
-                          <div className={`${styles.colisTimelineContent} ${!isDone ? styles.colisTimelineContentPending : ""}`}>
-                            <span className={styles.colisTimelineStepName} style={{ color: isDone ? "#ffffff" : "rgba(255,255,255,0.4)", fontWeight: isCurrent ? "700" : "500" }}>{step}</span>
-                            {isCurrent && selectedColis.scannedAt && (
-                              <span className={styles.colisTimelineTime} style={{ color: "#34d399" }}>Dernière mise à jour : {selectedColis.scannedAt}</span>
+                          <div style={{ fontSize: "0.7rem", color: isActive ? "#00673C" : "#718096", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "2px", fontWeight: isActive ? 600 : 500 }}>
+                            {lastMsg}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Side: Active Chat Window */}
+              <div style={{ display: "flex", flexDirection: "column", background: "#ffffff" }}>
+                {/* Active chat header */}
+                <div style={{
+                  padding: "16px 20px",
+                  borderBottom: "1px solid #edf2f7",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  background: "rgba(0,103,60,0.01)"
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: "0.92rem", fontWeight: 850, color: "#0A2F1D", margin: 0 }}>
+                      {AGENCIES_FOR_CHATS.find(c => c.id === activeThreadId)?.name}
+                    </h3>
+                    <span style={{ fontSize: "0.68rem", color: "#2f855a", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
+                      <span style={{ width: "6px", height: "6px", background: "#48bb78", borderRadius: "50%" }}></span>
+                      Service Client Connecté
+                    </span>
+                  </div>
+                </div>
+
+                {/* Messages pane */}
+                <div style={{
+                  flex: 1,
+                  maxHeight: "390px",
+                  overflowY: "auto",
+                  padding: "20px",
+                  background: "#fcfdfe",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px"
+                }}>
+                  {(chatThreads[activeThreadId] || []).length === 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "#a0aec0", padding: "40px", textAlign: "center" }}>
+                      <div style={{ fontSize: "2rem", marginBottom: "10px" }}>✉</div>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 700 }}>Début de la conversation</div>
+                      <div style={{ fontSize: "0.7rem", color: "#cbd5e0", marginTop: "4px" }}>Envoyez un message pour démarrer l'assistance en direct.</div>
+                    </div>
+                  ) : (
+                    (chatThreads[activeThreadId] || []).map(msg => {
+                      const isSent = msg.sender === "contact";
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            maxWidth: "70%",
+                            alignSelf: isSent ? "flex-end" : "flex-start",
+                            background: isSent ? "#00673C" : "#f1f5f9",
+                            color: isSent ? "#ffffff" : "#1a202c",
+                            padding: "10px 14px",
+                            borderRadius: isSent ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
+                            position: "relative"
+                          }}
+                        >
+                          <div style={{ fontSize: "0.8rem", fontWeight: 600, lineHeight: 1.45 }}>{msg.text}</div>
+                          <div style={{ 
+                            fontSize: "0.6rem", 
+                            color: isSent ? "rgba(255,255,255,0.7)" : "#a0aec0", 
+                            textAlign: "right", 
+                            marginTop: "4px", 
+                            fontWeight: 600,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            gap: "4px"
+                          }}>
+                            <span>{msg.time}</span>
+                            {isSent && (
+                              <span 
+                                style={{ 
+                                  color: msg.isRead ? "#fccd05" : "rgba(255,255,255,0.5)", 
+                                  fontSize: "0.85rem", 
+                                  fontWeight: "bold",
+                                  lineHeight: "1",
+                                  marginLeft: "2px"
+                                }}
+                                title={msg.isRead ? "Lu" : "Distribué"}
+                              >
+                                ✓✓
+                              </span>
                             )}
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-
+                    })
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
 
-        {clientActiveTab === "messageries" && (
-          <div className={styles.tabContentFadeIn}>
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader} style={{ background: "rgba(0,103,60,0.02)" }}>
-                <h2 className={styles.panelTitle}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:"18px",height:"18px",color:"#00673C",marginRight:"8px",display:"inline-block",verticalAlign:"middle"}}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Centre d'Assistance & Messagerie</h2>
-              </div>
-              <div className={styles.panelBody} style={{ textAlign: "center", padding: "50px 20px" }}>
-                <div style={{ marginBottom: "15px", display: "flex", justifyContent: "center" }}><svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="1.8" style={{width:"48px",height:"48px"}}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
-                <h3>Aucun message</h3>
-                <p style={{ color: "#718096", maxWidth: "400px", margin: "10px auto" }}>
-                  Vous n'avez pas de message en cours. Notre service client est disponible 24/7 pour toute assistance sur vos trajets.
-                </p>
-                <button type="button" className={styles.loginBtn} style={{ maxWidth: "250px", margin: "15px auto 0 auto" }}>
-                  Démarrer une conversation
-                </button>
+                {/* Input Area */}
+                <form onSubmit={handleSendPassengerMessage} style={{
+                  padding: "15px 20px",
+                  borderTop: "1px solid #edf2f7",
+                  display: "flex",
+                  gap: "10px",
+                  background: "#ffffff"
+                }}>
+                  <input
+                    type="text"
+                    placeholder="Écrivez votre message ici..."
+                    value={chatInputText}
+                    onChange={(e) => setChatInputText(e.target.value)}
+                    style={{
+                      flex: 1,
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "999px",
+                      padding: "10px 20px",
+                      outline: "none",
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      color: "#1a202c",
+                      transition: "all 0.2s ease"
+                    }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = "#00673C"}
+                    onBlur={(e) => e.currentTarget.style.borderColor = "#e2e8f0"}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "50%",
+                      background: "#00673C",
+                      color: "#ffffff",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "0.9rem",
+                      transition: "all 0.2s ease"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.05)"}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                  >
+                    ➤
+                  </button>
+                </form>
               </div>
             </div>
           </div>

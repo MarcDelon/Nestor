@@ -54,8 +54,9 @@ export default function LoginPage() {
       return;
     }
 
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
     try {
-      const response = await fetch("http://localhost:5000/api/auth/login", {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
@@ -90,14 +91,30 @@ export default function LoginPage() {
       const lowerEmail = email.toLowerCase();
       let simulatedRole = "client";
       let simulatedName = "Jean Client";
-      
-      if (lowerEmail.includes("admin")) {
+
+      if (lowerEmail === "admin@safetrip.cm" || lowerEmail === "admin@safetrip.net") {
         simulatedRole = "admin";
         simulatedName = "Administrateur Principal";
-      } else if (lowerEmail.includes("finexs") || lowerEmail.includes("buca") || lowerEmail.includes("agency") || lowerEmail.includes("agence")) {
+      } else if (lowerEmail === "finexs@safetrip.cm") {
         simulatedRole = "agency";
         simulatedName = "Finexs Voyage";
         localStorage.setItem("safetrip_agency_id", "1");
+      } else if (lowerEmail === "buca@safetrip.cm") {
+        simulatedRole = "agency";
+        simulatedName = "Buca Voyage";
+        localStorage.setItem("safetrip_agency_id", "2");
+      } else if (lowerEmail === "general@safetrip.cm") {
+        simulatedRole = "agency";
+        simulatedName = "General Express";
+        localStorage.setItem("safetrip_agency_id", "3");
+      } else if (lowerEmail === "touristique@safetrip.cm") {
+        simulatedRole = "agency";
+        simulatedName = "Touristique Express";
+        localStorage.setItem("safetrip_agency_id", "4");
+      } else if (lowerEmail === "men@safetrip.cm") {
+        simulatedRole = "agency";
+        simulatedName = "Men Travel";
+        localStorage.setItem("safetrip_agency_id", "5");
       }
       
       localStorage.setItem("safetrip_logged_in", "true");
@@ -122,8 +139,9 @@ export default function LoginPage() {
       return;
     }
 
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
     try {
-      const response = await fetch("http://localhost:5000/api/auth/signup", {
+      const response = await fetch(`${API_BASE}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

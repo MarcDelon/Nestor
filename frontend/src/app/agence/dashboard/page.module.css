@@ -1,11 +1,11 @@
 .main {
   width: 100%;
-  background: #f4f7f5;
+  background: var(--bg-cream, #F7F4EE);
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
-  font-family: 'Montserrat', sans-serif;
-  color: #2d3748;
+  font-family: var(--font-body, 'DM Sans', 'Poppins', sans-serif);
+  color: var(--text-primary, #1C2B22);
 }
 
 /* Header Styles */
@@ -14,13 +14,13 @@
   top: 0;
   left: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(247, 244, 238, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   z-index: 1000;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(230, 225, 214, 0.7);
+  box-shadow: 0 4px 24px rgba(7, 26, 14, 0.05);
 }
 
 .headerContent {
@@ -93,7 +93,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #f0f9f4 0%, #e8f5ef 50%, #f5f8ff 100%);
+  background: linear-gradient(150deg, #F7F4EE 0%, #EDE9DF 50%, #F2EFE9 100%);
 }
 
 /* Full-screen workspace for client/agency dashboards (no header padding needed) */
@@ -105,7 +105,7 @@
   flex-direction: column;
 }
 
-/* Login Gate Styling (Beautiful Elegant Light White & Green theme) */
+/* Login Gate Styling */
 .loginGateContainer {
   display: flex;
   justify-content: center;
@@ -113,20 +113,30 @@
   flex: 1;
   min-height: 100vh;
   padding: 20px;
-  background: linear-gradient(135deg, #f0f9f4 0%, #e8f5ef 50%, #f5f8ff 100%);
+  background: linear-gradient(150deg, #F7F4EE 0%, #EDE9DF 50%, #F2EFE9 100%);
 }
 
 .loginCard {
   background: #ffffff;
-  border-radius: 20px;
+  border-radius: 24px;
   padding: 28px 28px 20px 28px;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0, 103, 60, 0.12), 0 4px 16px rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(0, 103, 60, 0.1);
-  color: #2d3748;
+  box-shadow: 0 24px 64px rgba(7, 26, 14, 0.12), 0 4px 16px rgba(7, 26, 14, 0.06);
+  border: 1px solid rgba(230, 225, 214, 0.8);
+  color: #1C2B22;
   position: relative;
   overflow: hidden;
+}
+
+.loginCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #FCD116 0%, #CE1126 50%, #007A5E 100%);
 }
 
 .loginHeader {
@@ -276,16 +286,29 @@
 
 /* Dashboard Workspace Header */
 .agencyBanner {
-  background: linear-gradient(135deg, #0A2F1D 0%, #00673C 100%);
-  border-radius: 14px;
-  padding: 16px 20px;
+  background: linear-gradient(135deg, #071A0E 0%, #0B6B41 70%, #0d5c38 100%);
+  border-radius: 16px;
+  padding: 18px 22px;
   color: #ffffff;
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin-bottom: 18px;
-  box-shadow: 0 6px 20px rgba(10, 47, 29, 0.12);
-  border: 1px solid rgba(251, 166, 0, 0.15);
+  box-shadow: 0 10px 32px rgba(7, 26, 14, 0.18);
+  border: 1px solid rgba(200, 148, 30, 0.20);
+  position: relative;
+  overflow: hidden;
+}
+
+.agencyBanner::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #FCD116 0%, #CE1126 50%, #007A5E 100%);
+  pointer-events: none;
 }
 
 @media (min-width: 768px) {
@@ -392,10 +415,11 @@
 
 .statCard {
   background: #ffffff;
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
-  border: 1px solid #eef2f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 4px 16px rgba(7, 26, 14, 0.06);
+  border: 1px solid var(--border-warm, #E6E1D6);
+  border-left: 3px solid transparent;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -404,8 +428,9 @@
 
 .statCard:hover {
   transform: translateY(-4px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 103, 60, 0.1);
+  box-shadow: 0 16px 36px rgba(7, 26, 14, 0.10);
+  border-color: rgba(11, 107, 65, 0.20);
+  border-left-color: #C8941E;
 }
 
 .statIconBox {
@@ -472,18 +497,18 @@
 .panelCard {
   background: #ffffff;
   border-radius: 20px;
-  border: 1px solid #eef2f0;
-  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-warm, #E6E1D6);
+  box-shadow: 0 8px 28px rgba(7, 26, 14, 0.06);
   overflow: hidden;
 }
 
 .panelHeader {
   padding: 22px 28px;
-  border-bottom: 1px solid #edf2f7;
+  border-bottom: 1px solid var(--border-light, #EDE9DF);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(10, 47, 29, 0.01);
+  background: rgba(7, 26, 14, 0.015);
 }
 
 .panelTitle {
@@ -1022,14 +1047,14 @@
   display: flex;
   flex: 1;
   height: 100vh;
-  background: #f7fafc;
+  background: var(--bg-cream, #F7F4EE);
   overflow: hidden;
 }
 
 .clientSidebar {
   width: 220px;
-  background: #ffffff;
-  border-right: 1px solid #edf2f7;
+  background: #071A0E;
+  border-right: none;
   display: flex;
   flex-direction: column;
   padding: 20px 14px;
@@ -1037,14 +1062,14 @@
   height: 100vh;
   overflow-y: auto;
   overscroll-behavior: none;
-  box-shadow: 2px 0 10px rgba(0,0,0,0.03);
+  box-shadow: 4px 0 24px rgba(7, 26, 14, 0.20);
 }
 
 .sidebarBrand {
   text-align: center;
   margin-bottom: 24px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #edf2f7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
 }
 
 .sidebarLogoImg {
@@ -1067,24 +1092,24 @@
   border: none;
   padding: 12px 14px;
   border-radius: 10px;
-  color: #718096;
-  font-size: 0.9rem;
-  font-weight: 700;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.88rem;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   transition: all 0.2s ease;
   width: 100%;
-  font-family: inherit;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
 }
 
 .sidebarNavItem:hover {
-  background: #f7fafc;
-  color: #00673C;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .sidebarNavItemActive {
-  background: #eef8f3;
-  color: #00673C;
+  background: rgba(200, 148, 30, 0.15);
+  color: #C8941E;
 }
 
 .sidebarNavIcon {
@@ -1097,7 +1122,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border-top: 1px dashed #edf2f7;
+  border-top: 1px dashed rgba(255, 255, 255, 0.10);
   padding-top: 16px;
 }
 
@@ -1107,41 +1132,42 @@
   gap: 12px;
   padding: 12px 14px;
   border-radius: 10px;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   width: 100%;
   text-align: left;
-  font-family: inherit;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
 }
 
 .sidebarFooterLink {
-  color: #718096;
+  color: rgba(255, 255, 255, 0.45);
   background: transparent;
   border: none;
   text-decoration: none;
 }
 
 .sidebarFooterLink:hover {
-  background: #f7fafc;
-  color: #00673C;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.80);
 }
 
 .sidebarLogoutBtn {
-  color: #e53e3e;
+  color: rgba(255, 100, 100, 0.70);
   background: transparent;
   border: none;
 }
 
 .sidebarLogoutBtn:hover {
-  background: #fff5f5;
+  background: rgba(255, 80, 80, 0.08);
+  color: rgba(255, 120, 120, 0.95);
 }
 
 .clientContentPane {
   flex-grow: 1;
   padding: 24px 28px;
-  background: #f4f7f5;
+  background: var(--bg-cream, #F7F4EE);
   overflow-y: auto;
   height: 100vh;
   overscroll-behavior: none;
@@ -1189,8 +1215,8 @@
 .billetCard {
   background: #ffffff;
   border-radius: 14px;
-  border: 1px solid #edf2f7;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+  border: 1px solid var(--border-warm, #E6E1D6);
+  box-shadow: 0 4px 14px rgba(7, 26, 14, 0.05);
   display: flex;
   align-items: stretch;
   overflow: hidden;
@@ -1199,9 +1225,9 @@
 }
 
 .billetCard:hover {
-  box-shadow: 0 6px 24px rgba(0,103,60,0.08);
-  border-color: rgba(0,103,60,0.2);
-  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(7, 26, 14, 0.10);
+  border-color: rgba(11, 107, 65, 0.22);
+  transform: translateY(-2px);
 }
 
 .billetStripe {
@@ -1209,7 +1235,7 @@
   flex-shrink: 0;
 }
 
-.billetStripeActive { background: #00673C; }
+.billetStripeActive { background: #0B6B41; }
 .billetStripeCompleted { background: #a0aec0; }
 .billetStripeCancelled { background: #e53e3e; }
 
@@ -1306,23 +1332,23 @@
 .billetStatusCancelled { background: #fff5f5; color: #e53e3e; }
 
 .voirBilletBtn {
-  background: #00673C;
+  background: #0B6B41;
   color: #ffffff;
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
   padding: 7px 14px;
   border-radius: 8px;
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  font-family: inherit;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
   white-space: nowrap;
 }
 
 .voirBilletBtn:hover {
-  background: #004d2d;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,103,60,0.2);
+  background: #071A0E;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(7, 26, 14, 0.22);
 }
 
 /* =============================================
@@ -2028,8 +2054,8 @@
   background: #ffffff;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-  border: 1px solid #edf2f7;
+  box-shadow: 0 8px 28px rgba(7, 26, 14, 0.06);
+  border: 1px solid var(--border-warm, #E6E1D6);
   margin-bottom: 24px;
   position: relative;
 }
@@ -3037,6 +3063,7 @@
 
 .chatMessages {
   flex: 1;
+  max-height: 390px;
   padding: 20px;
   overflow-y: auto;
   background: #f7fafc;
@@ -3141,3 +3168,84 @@
   flex-direction: column;
   gap: 20px;
 }
+
+/* ── MOBILE RESPONSIVE ── */
+.mobileTopBar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #071A0E;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.mobileMenuBtn {
+  background: rgba(255,255,255,0.08);
+  border: none;
+  color: rgba(255,255,255,0.8);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebarOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 49;
+}
+
+@media (max-width: 767px) {
+  .clientDashboardLayout {
+    flex-direction: column;
+    height: auto;
+    overflow: auto;
+  }
+  .mobileTopBar { display: flex; }
+  .clientSidebar {
+    position: fixed;
+    left: -240px;
+    top: 0;
+    height: 100vh;
+    z-index: 50;
+    transition: left 0.3s cubic-bezier(0.16,1,0.3,1);
+    width: 240px;
+  }
+  .sidebarOpen {
+    left: 0 !important;
+  }
+  .clientContentPane {
+    height: auto;
+    min-height: calc(100vh - 60px);
+    padding: 16px 14px;
+  }
+  .statsGrid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .dashboardGrid {
+    grid-template-columns: 1fr !important;
+  }
+  .rosterTable { font-size: 0.72rem; }
+  .rosterTable th, .rosterTable td { padding: 8px 10px; }
+  .agencyBanner { border-radius: 12px; }
+  .billetCard { flex-direction: column; }
+  .billetCardRight { border-left: none; border-top: 1px dashed #edf2f7; flex-direction: row; justify-content: space-between; min-width: unset; }
+  .panelCard { border-radius: 14px; }
+  .panelBody { padding: 16px; }
+  .panelHeader { padding: 16px; }
+}
+
+@media (max-width: 480px) {
+  .statsGrid { grid-template-columns: 1fr !important; }
+  .clientContentPane { padding: 12px 10px; }
+  .agencyBanner { padding: 14px 16px; }
+}
+

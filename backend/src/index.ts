@@ -1,9 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { supabase } from './config/supabase';
 import authRoutes from './routes/authRoutes';
 import agencyRoutes from './routes/agencyRoutes';
 import clientRoutes from './routes/clientRoutes';
+import paymentRoutes from './routes/paymentRoutes';
 
 dotenv.config();
 
@@ -18,8 +20,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/agency', agencyRoutes);
 app.use('/api/client', clientRoutes);
-
-import { supabase } from './config/supabase';
+app.use('/api/payment', paymentRoutes);
 
 // Endpoint de test de santé
 app.get('/health', (req, res) => {

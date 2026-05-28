@@ -193,7 +193,7 @@ export const reserveTicket = async (req: Request, res: Response) => {
       // 1. Fetch journey details
       const { data: journey } = await (supabase as any)
         .from('journeys')
-        .select('price')
+        .select('price, agency_id, bus_id, dep_station, arr_station, dep_time')
         .eq('id', journey_id)
         .maybeSingle();
 
@@ -217,22 +217,38 @@ export const reserveTicket = async (req: Request, res: Response) => {
         return res.status(500).json({ error: error?.message || 'Erreur lors de la réservation.' });
       }
 
+      if (journey?.bus_id) {
+        const { count } = await (supabase as any)
+          .from('passengers')
+          .select('id', { count: 'exact', head: true })
+          .eq('journey_id', journey_id);
+
+        await (supabase as any)
+          .from('buses')
+          .update({ occupied: count || 0 })
+          .eq('id', journey.bus_id);
+      }
+
       // Generate a mock colis if luggage_count > 0 to track in dashboard
       if (luggage_count && luggage_count > 0) {
-        const qrRef = `QR-FX${journey_id.toString().slice(-2)}-${passenger.id}`;
+        const agencyId = journey?.agency_id || null;
+        const routeFrom = journey?.dep_station?.split(' - ')[0] || 'Départ';
+        const routeTo = journey?.arr_station?.split(' - ')[0] || 'Destination';
+        const tripDate = `${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} · ${journey?.dep_time || '00:00'}`;
+        const qrRef = `QR-ST${journey_id.toString().slice(-2)}-${passenger.id}`;
         await (supabase as any)
           .from('colis')
           .insert([{
-            id: `BAG-2026-FX${journey_id.toString().slice(-2)}-${passenger.id}`,
-            agency_id: 1, // Default or resolved from journey
+            id: `BAG-2026-ST${journey_id.toString().slice(-2)}-${passenger.id}`,
+            agency_id: agencyId,
             client_id: finalClientId,
             label: `Sac de Voyage principal de ${name}`,
             type: 'Sac',
             weight: 15.00,
             color: 'Noir',
             status: 'En attente de scan',
-            trip: 'Douala → Yaoundé',
-            trip_date: '25 Mai 2026 · 06:15',
+            trip: `${routeFrom} → ${routeTo}`,
+            trip_date: tripDate,
             qr_ref: qrRef,
             fragile: false,
             sender_name: name,
