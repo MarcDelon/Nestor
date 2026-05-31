@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useUser } from "@/components/UserContext";
 
-const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$($window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app'));
 
 interface Agency {
   id: number;

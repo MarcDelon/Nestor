@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from "react";
 import SplashScreen from "./SplashScreen";
-import OnboardingDemo from "./OnboardingDemo";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [splashDone, setSplashDone] = useState(false);
@@ -14,7 +13,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <>
       {!splashDone && <SplashScreen onFinish={handleSplashFinish} />}
-      {splashDone && <OnboardingDemo />}
       <div style={{ visibility: splashDone ? "visible" : "hidden" }}>
         {children}
       </div>

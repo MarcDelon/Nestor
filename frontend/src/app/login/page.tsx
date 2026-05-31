@@ -59,7 +59,11 @@ export default function LoginPage() {
       return;
     }
 
-    const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    const API_BASE = (process.env.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+      : (typeof window !== 'undefined'
+          ? `${window.location.protocol}//${window.location.hostname}`
+          : 'http://192.168.100.107:5000'));
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
@@ -137,7 +141,11 @@ export default function LoginPage() {
       return;
     }
 
-    const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    const API_BASE = (process.env.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+      : (typeof window !== 'undefined'
+          ? `${window.location.protocol}//${window.location.hostname}`
+          : 'http://192.168.100.107:5000'));
     try {
       const response = await fetch(`${API_BASE}/api/auth/signup`, {
         method: "POST",

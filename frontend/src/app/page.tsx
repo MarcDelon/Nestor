@@ -9,6 +9,8 @@ import { useTranslations } from "next-intl";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useUser } from "@/components/UserContext";
 
+import { Joyride } from "react-joyride";
+
 const agencies = [
   { name: 'Finexs', image: '/images/finexs.png' },
   { name: 'Buca Voyage', image: '/images/bucavoyage.png' },
@@ -20,11 +22,11 @@ const agencies = [
 const teamSlides = [
   { src: "/images/about_us_team.png", name: "L'Équipe Fondatrice", role: "6 experts passionnés" },
   { src: "/images/member1.jpg", name: "NZENANG MARC DELON", role: "Fondateur & CEO" },
-  { src: "/images/member2.png", name: "Carine Bella", role: "Co-fondatrice & CTO" },
-  { src: "/images/member3.jpg", name: "Jean-Pierre Talla", role: "Directeur des Opérations (COO)" },
-  { src: "/images/member4.png", name: "Sandra Kamdem", role: "Directrice Logistique" },
-  { src: "/images/member5.jpg", name: "Patrick Fotso", role: "Product Manager" },
-  { src: "/images/member6.png", name: "Syntyche Toukam", role: "Lead Fullstack Dev" },
+  { src: "/images/member2.png", name: "NGONO ALIMA", role: "Co-fondatrice & CTO" },
+  { src: "/images/member3.jpg", name: "YOUP YOUP AUTON", role: "Directeur des Opérations (COO)" },
+  { src: "/images/member4.png", name: "NKOTH CECILIA", role: "Directrice Logistique" },
+  { src: "/images/member5.jpg", name: "BOGNIE NESTOR", role: "Product Manager" },
+  { src: "/images/member6.png", name: "TA'A NINI GERARDO", role: "Lead Fullstack Dev" },
 ];
 
 export default function Home() {
@@ -43,7 +45,53 @@ export default function Home() {
 
   // Manage active dropdown key: 'hero-dep' | 'hero-ret' | 'hero-pass' | 'header-dep' | 'header-ret' | 'header-pass' | null
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  const [runTour, setRunTour] = useState(false);
   
+  useEffect(() => {
+    // Automatically start tour for new visitors
+    const hasSeenTour = localStorage.getItem("hasSeenTourV3");
+    if (!hasSeenTour) {
+      setRunTour(true);
+    }
+  }, []);
+
+  const tourSteps = [
+    {
+      target: "#tour-logo",
+      content: "Bienvenue sur SafeTrip ! C'est la page d'accueil.",
+      skipBeacon: true,
+    },
+    {
+      target: "#tour-reserve",
+      content: "Cliquez ici pour réserver vos billets de bus en ligne en toute simplicité.",
+      skipBeacon: true,
+    },
+    {
+      target: "#tour-agences",
+      content: "Découvrez toutes les agences de voyage partenaires et leurs offres.",
+      skipBeacon: true,
+    },
+    {
+      target: "#tour-traceability",
+      content: "Suivez vos bagages et colis en temps réel avec notre outil de traçabilité.",
+      skipBeacon: true,
+    },
+    {
+      target: "#tour-rental",
+      content: "Besoin d'un véhicule ? Louez-le dans cette section.",
+      skipBeacon: true,
+    }
+  ];
+
+  const handleJoyrideCallback = (data: any) => {
+    const { status } = data;
+    if (["finished", "skipped"].includes(status)) {
+      setRunTour(false);
+      localStorage.setItem("hasSeenTourV3", "true");
+    }
+  };
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user } = useUser();
   const isLoggedIn = !!user;
@@ -61,7 +109,7 @@ export default function Home() {
       window.location.href = "/client/dashboard";
     }
   };
-  
+
   const todayDate = new Date();
   const [depCalMonth, setDepCalMonth] = useState(todayDate.getMonth());
   const [depCalYear, setDepCalYear] = useState(todayDate.getFullYear());
@@ -95,7 +143,7 @@ export default function Home() {
               if (data && data.current) {
                 const liveTemp = Math.round(data.current.temperature_2m);
                 const code = data.current.weather_code;
-                
+
                 // WMO Weather interpretation codes
                 let desc = "Doux 🌤️";
                 if (code === 0) desc = "Ensoleillé ☀️";
@@ -414,7 +462,7 @@ export default function Home() {
               <div className={styles.passengerPopover} onClick={(e) => e.stopPropagation()}>
                 <div className={styles.popoverTitle}>{t("seatCount")}</div>
                 <div className={styles.popoverCounterRow}>
-                  <button 
+                  <button
                     type="button"
                     className={styles.counterBtn}
                     disabled={passengers <= 1}
@@ -423,7 +471,7 @@ export default function Home() {
                     -
                   </button>
                   <span className={styles.counterValue}>{passengers}</span>
-                  <button 
+                  <button
                     type="button"
                     className={styles.counterBtn}
                     disabled={passengers >= 10}
@@ -504,21 +552,43 @@ export default function Home() {
 
   return (
     <main className={styles.main}>
+      {runTour && (
+        <Joyride
+          steps={tourSteps}
+          run={runTour}
+          continuous={true}
+          onEvent={handleJoyrideCallback}
+          styles={{
+            floater: {
+              zIndex: 10000,
+            },
+            buttonPrimary: {
+              backgroundColor: '#00673C',
+            }
+          }}
+          locale={{
+            last: 'Terminer',
+            next: 'Suivant',
+            skip: 'Passer',
+            back: 'Précédent'
+          }}
+        />
+      )}
       {/* Header */}
       <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""}`}>
         <div className={styles.headerContent}>
-          <div className={styles.logoContainer}>
-            <img 
-              src="/images/logo-removebg-preview (2).png" 
-              alt="SafeTrip Logo" 
+          <div className={styles.logoContainer} id="tour-logo">
+            <img
+              src="/images/logo-removebg-preview (2).png"
+              alt="SafeTrip Logo"
               className={styles.logoImage}
             />
           </div>
           <nav className={styles.nav}>
-            <Link href="/reserver">{tc("reserve")}</Link>
-            <Link href="/agences">{tc("agencies")}</Link>
-            <Link href="/tracabilite">{tc("traceability")}</Link>
-            <Link href="/location">{tc("rental")}</Link>
+            <Link href="/reserver" id="tour-reserve">{tc("reserve")}</Link>
+            <Link href="/agences" id="tour-agences">{tc("agencies")}</Link>
+            <Link href="/tracabilite" id="tour-traceability">{tc("traceability")}</Link>
+            <Link href="/location" id="tour-rental">{tc("rental")}</Link>
             {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("admin")}</Link>}
             {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("myAgency")}</Link>}
             {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("travelerSpace")}</Link>}
@@ -534,29 +604,29 @@ export default function Home() {
             onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(o => !o); }}
             type="button"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:24,height:24,pointerEvents:'none'}}>
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 24, height: 24, pointerEvents: 'none' }}>
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
         </div>
 
         {mobileMenuOpen && (
           <>
-          <div className={styles.mobileMenuBackdrop} onClick={() => setMobileMenuOpen(false)} />
-          <div className={styles.mobileMenu} role="menu">
-            <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
-            <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
-            <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
-            <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
-            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("admin")}</Link>}
-            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("myAgency")}</Link>}
-            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("mySpace")}</Link>}
-            <button onClick={() => { toggleConnection(new MouseEvent('click') as any); setMobileMenuOpen(false); }} style={{background:"#00673C",color:"#fff",fontWeight:700,padding:"10px 20px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
-              {!isLoggedIn ? tc("login") : tc("myAccount")}
-            </button>
-          </div>
+            <div className={styles.mobileMenuBackdrop} onClick={() => setMobileMenuOpen(false)} />
+            <div className={styles.mobileMenu} role="menu">
+              <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
+              <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
+              <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
+              <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+              {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("admin")}</Link>}
+              {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("myAgency")}</Link>}
+              {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("mySpace")}</Link>}
+              <button onClick={() => { toggleConnection(new MouseEvent('click') as any); setMobileMenuOpen(false); }} style={{ background: "#00673C", color: "#fff", fontWeight: 700, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {!isLoggedIn ? tc("login") : tc("myAccount")}
+              </button>
+            </div>
           </>
         )}
 
@@ -577,9 +647,9 @@ export default function Home() {
           <div className={styles.heroTextColumn}>
             <h1 className={styles.heroTitle}>
               {t("heroTitle")}<img
-                src="/images/logo-removebg-preview (2).png" 
-                alt="SafeTrip Logo" 
-                className={styles.heroTitleLogo} 
+                src="/images/logo-removebg-preview (2).png"
+                alt="SafeTrip Logo"
+                className={styles.heroTitleLogo}
               />
             </h1>
             <p className={styles.heroSubtitle}>
@@ -590,11 +660,11 @@ export default function Home() {
           {/* Right Column: High-performance Rounded Video Card */}
           <div className={styles.heroVideoColumn}>
             <div className={styles.heroVideoWrapper}>
-              <video 
-                autoPlay 
-                loop 
-                muted 
-                playsInline 
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
                 className={styles.heroVideo}
                 poster="/bus.png"
               >
@@ -617,11 +687,11 @@ export default function Home() {
                       <span className={styles.cardHeaderTitle}>{t("timeLabel")} {citiesWeather[cityIdx].city.toUpperCase()}</span>
                     </div>
                   </div>
-                  
+
                   <div className={styles.cardMainValue}>
                     {currentTime}
                   </div>
-                  
+
                   <div className={styles.cardFooterRow}>
                     <span className={styles.cardFooterText}>{t("cameroonLabel")}</span>
                     <div className={styles.cardIndicators}>
@@ -662,11 +732,11 @@ export default function Home() {
                       )}
                     </div>
                   </div>
-                  
+
                   <div className={styles.cardMainValueWeather}>
                     {citiesWeather[cityIdx].temp}
                   </div>
-                  
+
                   <div className={styles.cardFooterRow}>
                     <span className={styles.cardFooterWeatherDesc}>{citiesWeather[cityIdx].desc.split(" ")[0]}</span>
                     <div className={styles.cardIndicators}>
@@ -721,13 +791,13 @@ export default function Home() {
             <div className={styles.aboutImageWrapper}>
               <div className={styles.sliderContainer}>
                 {teamSlides.map((slide, idx) => (
-                  <div 
+                  <div
                     key={idx}
                     className={`${styles.slide} ${idx === currentSlide ? styles.activeSlide : ""}`}
                   >
-                    <img 
-                      src={slide.src} 
-                      alt={slide.name} 
+                    <img
+                      src={slide.src}
+                      alt={slide.name}
                       className={styles.aboutImage}
                     />
                     <div className={styles.imageOverlayBadge}>
@@ -737,9 +807,9 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              
+
               {/* Slider Navigation Controls */}
-              <button 
+              <button
                 className={styles.slideArrowLeft}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -748,7 +818,7 @@ export default function Home() {
               >
                 ‹
               </button>
-              <button 
+              <button
                 className={styles.slideArrowRight}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -759,14 +829,14 @@ export default function Home() {
               </button>
             </div>
           </div>
-          
+
           {/* Right Column: Text & Stats */}
           <div className={`${styles.aboutTextColumn} ${styles.revealRight}`}>
             <span className={styles.aboutSectionBadge}>{t("aboutBadge")}</span>
             <h2 className={styles.aboutTitle}>{t("aboutTitle")}</h2>
             <p className={styles.aboutDescription}>{t("aboutDesc1")}</p>
             <p className={styles.aboutDescription}>{t("aboutDesc2")}</p>
-            
+
             <div className={styles.aboutStatsGrid}>
               <div className={styles.statCard}>
                 <h4 className={styles.statVal}>50k+</h4>
@@ -793,7 +863,7 @@ export default function Home() {
             <span className={styles.traceabilityBadge}>{t("tracBadge")}</span>
             <h2 className={styles.traceabilityTitle}>{t("tracTitle")}</h2>
             <p className={styles.traceabilityDescription}>{t("tracDesc")}</p>
-            
+
             <div className={styles.traceabilityFeatureList}>
               <div className={styles.traceabilityFeatureItem}>
                 <div className={styles.featureIconBox}>
@@ -841,7 +911,7 @@ export default function Home() {
                 <div className={styles.cardFront}>
                   <div className={styles.scanLine}></div>
                   <span className={styles.cardFrontLabel}>{t("scanQr")}</span>
-                  
+
                   <svg className={styles.qrCodeSvg} viewBox="0 0 100 100" fill="currentColor">
                     <path d="M0 0h30v30H0zm10 10h10v10H10zM70 0h30v30H70zm10 10h10v10H80zM0 70h30v30H0zm10 10h10v10H10z" />
                     <path d="M75 75h10v10H75z" />
@@ -894,10 +964,10 @@ export default function Home() {
           {/* Column 1: Brand details */}
           <div className={styles.footerBrandCol}>
             <div className={styles.footerLogoContainer}>
-              <img 
-                src="/images/logo-removebg-preview (2).png" 
-                alt="SafeTrip Logo" 
-                className={styles.footerLogo} 
+              <img
+                src="/images/logo-removebg-preview (2).png"
+                alt="SafeTrip Logo"
+                className={styles.footerLogo}
               />
             </div>
             <p className={styles.footerDesc}>{t("footerDesc")}</p>
