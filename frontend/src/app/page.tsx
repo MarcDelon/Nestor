@@ -19,7 +19,7 @@ const agencies = [
 
 const teamSlides = [
   { src: "/images/about_us_team.png", name: "L'Équipe Fondatrice", role: "6 experts passionnés" },
-  { src: "/images/member1.jpg", name: "Marc Ndip", role: "Fondateur & CEO" },
+  { src: "/images/member1.jpg", name: "NZENANG MARC DELON", role: "Fondateur & CEO" },
   { src: "/images/member2.png", name: "Carine Bella", role: "Co-fondatrice & CTO" },
   { src: "/images/member3.jpg", name: "Jean-Pierre Talla", role: "Directeur des Opérations (COO)" },
   { src: "/images/member4.png", name: "Sandra Kamdem", role: "Directrice Logistique" },
