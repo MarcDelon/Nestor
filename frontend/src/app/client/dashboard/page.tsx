@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/components/UserContext";
+import { useSocket } from "@/components/useSocket";
 
 interface Billet {
   id: string;
@@ -511,8 +512,25 @@ interface Voucher {
     fetchNotifications();
     fetchClientVouchers();
 
-    const iv = setInterval(fetchNotifications, 25000);
+    // Fallback polling (slower interval since Socket.IO handles real-time)
+    const iv = setInterval(fetchNotifications, 60000);
     return () => clearInterval(iv);
+  }, [user]);
+
+  // Socket.IO real-time notifications
+  const { connect: socketConnect, disconnect: socketDisconnect } = useSocket((notification) => {
+    // Received real-time notification — add to list and show toast
+    setNotifications(prev => [{ ...notification, id: Date.now(), read: false, created_at: new Date().toISOString() }, ...prev]);
+    setUnreadCount(prev => prev + 1);
+    playChime();
+    showToast(notification.title || 'Nouvelle notification', true);
+  });
+
+  useEffect(() => {
+    if (user) {
+      socketConnect();
+    }
+    return () => socketDisconnect();
   }, [user]);
 
   const showToast = (message: string, isSuccess = true) => {

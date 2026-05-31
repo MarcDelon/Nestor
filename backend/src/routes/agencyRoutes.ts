@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import {
   getAgencies,
+  createAgency,
+  updateAgency,
+  deleteAgency,
   getBuses,
   addBus,
   updateBus,
@@ -29,12 +32,16 @@ import {
   getAgencyNotifications,
   markAgencyNotificationRead
 } from '../controllers/agencyController';
-import { requireAuth } from '../middleware/authMiddleware';
+import { requireAuth, requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
 
 // Public routes (no auth required — used by passengers browsing)
 router.get('/agencies', getAgencies);
+// Admin-only agency CRUD
+router.post('/agencies', requireAuth, requireRole('admin'), createAgency);
+router.put('/agencies/:id', requireAuth, requireRole('admin'), updateAgency);
+router.delete('/agencies/:id', requireAuth, requireRole('admin'), deleteAgency);
 router.get('/journeys/all', getAllJourneys);
 router.get('/journeys', getJourneys);
 router.get('/buses/all', getBuses);

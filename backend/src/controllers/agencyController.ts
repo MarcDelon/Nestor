@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { transporter } from '../utils/mailer';
+import { emitNotification } from '../utils/socket';
+import { sendSMS } from '../utils/sms';
 
 // ============================================================
 // SIMULATED LOCAL DATA (fallback when Supabase is not configured)
@@ -423,14 +425,19 @@ export const scanPassengerLuggage = async (req: Request, res: Response) => {
           const routeFrom = j?.dep_station?.split(' - ')[0] || 'Départ';
           const routeTo = j?.arr_station?.split(' - ')[0] || 'Destination';
           await (supabase as any)
-            .from('notifications')
+            .from(‘notifications')
             .insert([{
               client_id: p.client_id,
-              type: 'luggage_scanned',
-              title: 'Bagage scanné à l’embarquement',
+              type: ‘luggage_scanned',
+              title: ‘Bagage scanné à l\'embarquement',
               body: `${p.name} — Siège ${p.seat} — ${routeFrom} → ${routeTo}`,
               data: { passenger_id: passengerId, journey_id: p.journey_id, dep_time: j?.dep_time || null }
             }]);
+          emitNotification(‘client', p.client_id, {
+            type: ‘luggage_scanned',
+            title: ‘Bagage scanné à l\'embarquement',
+            body: `${p.name} — Siège ${p.seat} — ${routeFrom} → ${routeTo}`,
+          });
         }
       } catch { /* ignore notification errors */ }
       return res.json(data);
@@ -482,17 +489,22 @@ export const scanTicket = async (req: Request, res: Response) => {
           const routeFrom = j?.dep_station?.split(' - ')[0] || 'Départ';
           const routeTo = j?.arr_station?.split(' - ')[0] || 'Destination';
           await (supabase as any)
-            .from('notifications')
+            .from(‘notifications')
             .insert([{
               client_id: passenger.client_id,
-              type: 'ticket_validated',
-              title: 'Billet validé à l’embarquement',
+              type: ‘ticket_validated',
+              title: ‘Billet validé à l\'embarquement',
               body: `${passenger.name} — Siège ${passenger.seat} — ${routeFrom} → ${routeTo}`,
               data: { passenger_id: passenger.id, journey_id: passenger.journey_id, dep_time: j?.dep_time || null }
             }]);
+          emitNotification(‘client', passenger.client_id, {
+            type: ‘ticket_validated',
+            title: ‘Billet validé à l\'embarquement',
+            body: `${passenger.name} — Siège ${passenger.seat} — ${routeFrom} → ${routeTo}`,
+          });
         }
       } catch { /* ignore notification errors */ }
-      return res.json({ status: 'validated', passenger: updated });
+      return res.json({ status: ‘validated', passenger: updated });
     }
     return res.json({ status: 'validated' });
   } catch (err: any) {
@@ -596,15 +608,21 @@ export const sendMessage = async (req: Request, res: Response) => {
             .ilike('email', `${threadId}@%`)
             .maybeSingle();
           if (userRow?.id) {
+            const notifBody = (typeof text === 'string' && text.length > 0) ? (text.length > 120 ? text.slice(0,117) + '…' : text) : 'Nouveau message reçu';
             await (supabase as any)
               .from('notifications')
               .insert([{
                 client_id: userRow.id,
                 type: 'agency_replied',
                 title: "Réponse de l'agence",
-                body: (typeof text === 'string' && text.length > 0) ? (text.length > 120 ? text.slice(0,117) + '…' : text) : 'Nouveau message reçu',
+                body: notifBody,
                 data: { thread_id: threadId }
               }]);
+            emitNotification('client', userRow.id, {
+              type: 'agency_replied',
+              title: "Réponse de l'agence",
+              body: notifBody,
+            });
           }
         }
       } catch { /* ignore notification errors */ }
@@ -962,6 +980,86 @@ export const submitQuoteRequest = async (req: Request, res: Response) => {
   }
 };
 
+// ============================================================
+// ADMIN: POST /api/agency/agencies — Create a new agency (admin only)
+// ============================================================
+export const createAgency = async (req: Request, res: Response) => {
+  try {
+    const { name, logo, photo, certification, phone, address, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'Le nom de l\'agence est requis.' });
+
+    if (supabase) {
+      const { data, error } = await (supabase as any)
+        .from('agencies')
+        .insert([{
+          name,
+          logo: logo || '/images/default_agency.png',
+          photo: photo || logo || '/images/default_agency.png',
+          certification: certification || 'Partenaire Certifié',
+          phone: phone || null,
+          address: address || null,
+          description: description || null
+        }])
+        .select()
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    }
+    return res.status(503).json({ error: 'Base de données non disponible.' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+};
+
+// ============================================================
+// ADMIN: PUT /api/agency/agencies/:id — Update an agency (admin only)
+// ============================================================
+export const updateAgency = async (req: Request, res: Response) => {
+  try {
+    const agencyId = parseInt(req.params.id, 10);
+    const { name, logo, photo, certification, phone, address, description } = req.body;
+
+    if (supabase) {
+      const updateFields: any = {};
+      if (name !== undefined) updateFields.name = name;
+      if (logo !== undefined) { updateFields.logo = logo; updateFields.photo = logo; }
+      if (photo !== undefined) updateFields.photo = photo;
+      if (certification !== undefined) updateFields.certification = certification;
+      if (phone !== undefined) updateFields.phone = phone;
+      if (address !== undefined) updateFields.address = address;
+      if (description !== undefined) updateFields.description = description;
+
+      const { data, error } = await (supabase as any)
+        .from('agencies')
+        .update(updateFields)
+        .eq('id', agencyId)
+        .select()
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+      if (!data) return res.status(404).json({ error: 'Agence introuvable.' });
+      return res.json(data);
+    }
+    return res.status(503).json({ error: 'Base de données non disponible.' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+};
+
+// ============================================================
+// ADMIN: DELETE /api/agency/agencies/:id — Delete an agency (admin only)
+// ============================================================
+export const deleteAgency = async (req: Request, res: Response) => {
+  try {
+    const agencyId = parseInt(req.params.id, 10);
+
+    if (supabase) {
+      const { error } = await (supabase as any)
+        .from('agencies')
+        .delete()
+        .eq('id', agencyId);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ success: true, message: 'Agence supprimée avec succès.' });
+    }
+    return res.status(503).json({ error: 'Base de données non disponible.' });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+};
+
 // ── NOTIFY DELIVERY ── Called when an agency scans a parcel QR at destination
 export const notifyDelivery = async (req: Request, res: Response) => {
   try {
@@ -981,15 +1079,25 @@ export const notifyDelivery = async (req: Request, res: Response) => {
           .select('id, client_id, qr_ref')
           .maybeSingle();
         if (updated?.client_id) {
+          const deliveryBody = `Votre colis ${updated.id || colisRef} a été confirmé livré${agenceName ? ` par ${agenceName}` : ''}.`;
           await (supabase as any)
             .from('notifications')
             .insert([{
               client_id: updated.client_id,
               type: 'parcel_delivered',
               title: 'Colis livré',
-              body: `Votre colis ${updated.id || colisRef} a été confirmé livré${agenceName ? ` par ${agenceName}` : ''}.`,
+              body: deliveryBody,
               data: { colis_id: updated.id || colisRef, qr_ref: updated.qr_ref || null }
             }]);
+          emitNotification('client', updated.client_id, {
+            type: 'parcel_delivered',
+            title: 'Colis livré',
+            body: deliveryBody,
+          });
+          // SMS notification for parcel delivery
+          if (recipientPhone) {
+            sendSMS(recipientPhone, `SafeTrip: Votre colis ${colisRef} a été livré${agenceName ? ` par ${agenceName}` : ''}. Merci d'utiliser SafeTrip !`).catch(() => {});
+          }
         }
       } catch (e: any) {
         console.warn('Supabase colis update/notify failed:', e?.message || e);

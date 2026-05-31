@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/components/UserContext";
+import { useSocket } from "@/components/useSocket";
 
 const API_BASE = `${(typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'))}/api/agency`;
 const getAuthHeaders = () => ({
@@ -211,9 +212,21 @@ export default function AgencyDashboard() {
   useEffect(() => {
     let iv: any;
     fetchAgencyNotifications();
-    iv = setInterval(fetchAgencyNotifications, 25000);
+    // Slower fallback polling since Socket.IO handles real-time
+    iv = setInterval(fetchAgencyNotifications, 60000);
     return () => { if (iv) clearInterval(iv); };
   }, [currentAgencyId]);
+
+  // Socket.IO real-time notifications for agency
+  const { connect: socketConnect, disconnect: socketDisconnect } = useSocket((notification) => {
+    setAgencyNotifications((prev: any[]) => [{ ...notification, id: Date.now(), read: false, created_at: new Date().toISOString() }, ...prev]);
+    setAgencyUnread((prev: number) => prev + 1);
+  });
+
+  useEffect(() => {
+    if (user) socketConnect();
+    return () => socketDisconnect();
+  }, [user]);
 
   const parseQrText = (text: string) => {
     // New compact token format: STP|v1|<token>
