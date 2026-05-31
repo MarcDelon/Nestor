@@ -4,9 +4,14 @@ import styles from "./page.module.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useUser } from "@/components/UserContext";
 
 export default function LoginPage() {
   const router = useRouter();
+  const t = useTranslations("Login");
+  const tc = useTranslations("Common");
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,14 +25,14 @@ export default function LoginPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isToastSuccess, setIsToastSuccess] = useState(true);
 
+  const { user, login: contextLogin } = useUser();
+
   // Check if already logged in and redirect accordingly
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    if (isLoggedIn) {
-      const role = localStorage.getItem("safetrip_user_role") || "client";
-      redirectBasedOnRole(role);
+    if (user) {
+      redirectBasedOnRole(user.role);
     }
-  }, []);
+  }, [user]);
 
   const showToast = (message: string, isSuccess = true) => {
     setToastMessage(message);
@@ -50,32 +55,23 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      showToast("Veuillez renseigner votre email et mot de passe.", false);
+      showToast(t("errorEmptyFields"), false);
       return;
     }
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
+        credentials: "include"
       });
 
       const data = await response.json();
 
       if (response.ok && data.user) {
-        localStorage.setItem("safetrip_logged_in", "true");
-        localStorage.setItem("safetrip_token", data.token);
-        localStorage.setItem("safetrip_user_role", data.user.role);
-        localStorage.setItem("safetrip_user_name", data.user.fullName);
-        localStorage.setItem("safetrip_user_email", data.user.email);
-        localStorage.setItem("safetrip_user_id", data.user.id);
-        localStorage.setItem("safetrip_user_photo", data.user.photo || "/images/default_avatar.png");
-        if (data.user.agencyId) {
-          localStorage.setItem("safetrip_agency_id", String(data.user.agencyId));
-        }
-
+        contextLogin(data.user);
         showToast(data.message || "Connexion réussie !");
         
         setTimeout(() => {
@@ -91,6 +87,7 @@ export default function LoginPage() {
       const lowerEmail = email.toLowerCase();
       let simulatedRole = "client";
       let simulatedName = "Jean Client";
+      let simulatedAgencyId = "";
 
       if (lowerEmail === "admin@safetrip.cm" || lowerEmail === "admin@safetrip.net") {
         simulatedRole = "admin";
@@ -98,32 +95,33 @@ export default function LoginPage() {
       } else if (lowerEmail === "finexs@safetrip.cm") {
         simulatedRole = "agency";
         simulatedName = "Finexs Voyage";
-        localStorage.setItem("safetrip_agency_id", "1");
+        simulatedAgencyId = "1";
       } else if (lowerEmail === "buca@safetrip.cm") {
         simulatedRole = "agency";
         simulatedName = "Buca Voyage";
-        localStorage.setItem("safetrip_agency_id", "2");
+        simulatedAgencyId = "2";
       } else if (lowerEmail === "general@safetrip.cm") {
         simulatedRole = "agency";
         simulatedName = "General Express";
-        localStorage.setItem("safetrip_agency_id", "3");
+        simulatedAgencyId = "3";
       } else if (lowerEmail === "touristique@safetrip.cm") {
         simulatedRole = "agency";
         simulatedName = "Touristique Express";
-        localStorage.setItem("safetrip_agency_id", "4");
+        simulatedAgencyId = "4";
       } else if (lowerEmail === "men@safetrip.cm") {
         simulatedRole = "agency";
         simulatedName = "Men Travel";
-        localStorage.setItem("safetrip_agency_id", "5");
+        simulatedAgencyId = "5";
       }
       
-      localStorage.setItem("safetrip_logged_in", "true");
-      localStorage.setItem("safetrip_token", "simulated_token_12345");
-      localStorage.setItem("safetrip_user_role", simulatedRole);
-      localStorage.setItem("safetrip_user_name", simulatedName);
-      localStorage.setItem("safetrip_user_email", lowerEmail);
-      localStorage.setItem("safetrip_user_id", "simulated-id-999");
-      localStorage.setItem("safetrip_user_photo", simulatedRole === "agency" ? "/images/finexs.png" : simulatedRole === "admin" ? "/images/default_admin.png" : "/images/default_avatar.png");
+      contextLogin({
+        id: "simulated-id-999",
+        email: lowerEmail,
+        fullName: simulatedName,
+        role: simulatedRole as any,
+        photo: simulatedRole === "agency" ? "/images/finexs.png" : simulatedRole === "admin" ? "/images/default_admin.png" : "/images/default_avatar.png",
+        agencyId: simulatedRole === "agency" ? Number(simulatedAgencyId) : undefined
+      });
       
       showToast(`Connexion réussie ! (Simulation Locale - ${simulatedRole})`);
       setTimeout(() => {
@@ -135,11 +133,11 @@ export default function LoginPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regName || !regPhone || !regEmail || !regPassword) {
-      showToast("Veuillez remplir tous les champs obligatoires.", false);
+      showToast(t("errorAllFields"), false);
       return;
     }
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
     try {
       const response = await fetch(`${API_BASE}/api/auth/signup`, {
         method: "POST",
@@ -184,12 +182,13 @@ export default function LoginPage() {
             />
           </Link>
           <nav className={styles.nav}>
-            <Link href="/reserver">Réserver</Link>
-            <Link href="/#agences">Agences</Link>
-            <Link href="/#tracabilite">Traçabilité</Link>
+            <Link href="/reserver">{t("navReserve")}</Link>
+            <Link href="/#agences">{t("navAgencies")}</Link>
+            <Link href="/#tracabilite">{t("navTraceability")}</Link>
           </nav>
+          <LanguageToggle />
           <Link href="/" className={styles.headerBtn}>
-            Retour
+            {tc("back")}
           </Link>
         </div>
       </header>
@@ -209,21 +208,21 @@ export default function LoginPage() {
               alt="SafeTrip Logo" 
               className={styles.loginLogo}
             />
-            <p className={styles.loginSubtitle}>Votre portail SafeTrip — Voyageurs, Agences &amp; Administration</p>
-            
+            <p className={styles.loginSubtitle}>{t("subtitle")}</p>
+
             <div className={styles.tabLinks}>
               <span
                 className={`${styles.tabLink} ${isLoginMode ? styles.tabLinkActive : ""}`}
                 onClick={() => setIsLoginMode(true)}
               >
-                Connexion
+                {t("loginTab")}
               </span>
               <span className={styles.tabSeparator}>/</span>
               <span
                 className={`${styles.tabLink} ${!isLoginMode ? styles.tabLinkActive : ""}`}
                 onClick={() => setIsLoginMode(false)}
               >
-                Inscription
+                {t("registerTab")}
               </span>
             </div>
           </div>
@@ -235,13 +234,13 @@ export default function LoginPage() {
             >
               {/* FORM 1: CONNEXION UNIFIEE */}
               <form onSubmit={handleLogin} className={styles.loginForm}>
-                <h3 className={styles.formInsideTitle}>Se connecter</h3>
-                
+                <h3 className={styles.formInsideTitle}>{t("loginTitle")}</h3>
+
                 <div className={styles.inputGroup}>
-                  <label className={styles.inputLabel}>Adresse Email</label>
-                  <input 
-                    type="email" 
-                    placeholder="nom@exemple.com" 
+                  <label className={styles.inputLabel}>{t("emailLabel")}</label>
+                  <input
+                    type="email"
+                    placeholder={t("emailPlaceholder")}
                     className={styles.loginInput}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -250,10 +249,10 @@ export default function LoginPage() {
                 </div>
 
                 <div className={styles.inputGroup}>
-                  <label className={styles.inputLabel}>Mot de passe</label>
-                  <input 
-                    type="password" 
-                    placeholder="••••••••" 
+                  <label className={styles.inputLabel}>{t("passwordLabel")}</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
                     className={styles.loginInput}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -262,19 +261,19 @@ export default function LoginPage() {
                 </div>
 
                 <button type="submit" className={styles.loginBtn}>
-                  Se connecter
+                  {t("loginBtn")}
                 </button>
               </form>
 
               {/* FORM 2: INSCRIPTION VOYAGEUR */}
               <form onSubmit={handleRegister} className={styles.loginForm}>
-                <h3 className={styles.formInsideTitle}>Espace Voyageur</h3>
-                
+                <h3 className={styles.formInsideTitle}>{t("registerTitle")}</h3>
+
                 <div className={styles.inputGroup}>
-                  <label className={styles.inputLabel}>Nom complet</label>
-                  <input 
-                    type="text" 
-                    placeholder="Jean-Pierre Talla" 
+                  <label className={styles.inputLabel}>{t("fullNameLabel")}</label>
+                  <input
+                    type="text"
+                    placeholder={t("fullNamePlaceholder")}
                     className={styles.loginInput}
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
@@ -283,10 +282,10 @@ export default function LoginPage() {
                 </div>
 
                 <div className={styles.inputGroup}>
-                  <label className={styles.inputLabel}>Numéro de Téléphone</label>
-                  <input 
-                    type="tel" 
-                    placeholder="+237 6xx xx xx xx" 
+                  <label className={styles.inputLabel}>{t("phoneLabel")}</label>
+                  <input
+                    type="tel"
+                    placeholder={t("phonePlaceholder")}
                     className={styles.loginInput}
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
@@ -295,10 +294,10 @@ export default function LoginPage() {
                 </div>
 
                 <div className={styles.inputGroup}>
-                  <label className={styles.inputLabel}>Adresse Email</label>
-                  <input 
-                    type="email" 
-                    placeholder="jp.talla@email.com" 
+                  <label className={styles.inputLabel}>{t("emailLabel")}</label>
+                  <input
+                    type="email"
+                    placeholder="jp.talla@email.com"
                     className={styles.loginInput}
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
@@ -307,10 +306,10 @@ export default function LoginPage() {
                 </div>
 
                 <div className={styles.inputGroup}>
-                  <label className={styles.inputLabel}>Créer un mot de passe</label>
-                  <input 
-                    type="password" 
-                    placeholder="••••••••" 
+                  <label className={styles.inputLabel}>{t("createPasswordLabel")}</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
                     className={styles.loginInput}
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
@@ -319,7 +318,7 @@ export default function LoginPage() {
                 </div>
 
                 <button type="submit" className={styles.loginBtn}>
-                  Créer mon compte
+                  {t("registerBtn")}
                 </button>
               </form>
             </div>
@@ -328,7 +327,7 @@ export default function LoginPage() {
           <div className={styles.loginFooter}>
             <span>SafeTrip © 2026</span>
             <span style={{ margin: "0 6px" }}>·</span>
-            <span>Voyagez l&apos;esprit tranquille 🇨🇲</span>
+            <span>{t("footer")}</span>
           </div>
         </div>
       </div>

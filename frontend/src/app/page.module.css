@@ -4,25 +4,18 @@
 
 /* Header */
 .header {
-  position: fixed !important;
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   background: rgba(247, 244, 238, 0.92); /* Warm frosted cream */
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  z-index: 10000 !important;
+  z-index: 1000;
   padding: 12px 0;
   border-bottom: 1px solid rgba(230, 225, 214, 0.7);
   box-shadow: 0 4px 24px rgba(7, 26, 14, 0.05);
   transition: all var(--transition-speed) ease;
-}
-
-.headerScrolled {
-  background: rgba(255, 255, 255, 0.97) !important;
-  box-shadow: 0 10px 30px rgba(7, 26, 14, 0.1) !important;
-  border-bottom: 1px solid rgba(230, 225, 214, 0.9) !important;
-  padding: 8px 0 !important; /* Slightly more compact when scrolled */
 }
 
 .headerContent {
@@ -1958,12 +1951,26 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 6px;
+  padding: 14px;
+  margin: -4px -8px -4px 0;
   color: var(--primary-navy);
+  position: relative;
+  z-index: 1100;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0,0,0,0.05);
+  pointer-events: auto;
+  min-width: 48px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+}
+
+.hamburgerBtn svg {
+  pointer-events: none;
 }
 
 @media (max-width: 767px) {
-  .hamburgerBtn { display: flex; align-items: center; }
+  .hamburgerBtn { display: flex; }
   .nav { display: none !important; }
   .headerBtn { display: none; }
 }
@@ -1979,6 +1986,12 @@
   background: #ffffff;
   border-top: 1px solid rgba(230,225,214,0.7);
   padding: 8px 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  z-index: 1002;
 }
 
 .mobileMenu a, .mobileMenu button.mobileLinkBtn {
@@ -1993,6 +2006,14 @@
 }
 
 .mobileMenu a:hover { background: #f7fafc; }
+
+/* Backdrop under mobile menu */
+.mobileMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.15);
+  z-index: 1001;
+}
 
 /* ============================================
    GLOBAL RESPONSIVE — HOMEPAGE
@@ -2265,3 +2286,12 @@
   .hero::before, .hero::after { display: none; }
 }
 
+
+/* Force reveal on mobile to prevent blank screens if JS observer fails */
+@media (max-width: 768px) {
+  .reveal, .revealLeft, .revealRight {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

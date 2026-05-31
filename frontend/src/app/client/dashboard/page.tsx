@@ -4,6 +4,7 @@ import styles from "./page.module.css";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useUser } from "@/components/UserContext";
 
 interface Billet {
   id: string;
@@ -24,6 +25,8 @@ interface Billet {
   passenger: string;
   phone: string;
   busClass: string;
+  qrToken?: string | null;
+  ticketScanned?: boolean;
 }
 
 
@@ -43,17 +46,34 @@ interface Colis {
   dimensions?: string;
   fragile: boolean;
   notes?: string;
+  senderName?: string | null;
+  senderPhone?: string | null;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
 }
 
 
 export default function ClientDashboard() {
+interface Voucher {
+  id?: number;
+  code: string;
+  percentage: number;
+  max_uses: number;
+  current_uses: number;
+  status: "draft" | "published";
+  assigned_to?: string | null;
+  expires_at?: string | null;
+  created_at?: string;
+}
   const router = useRouter();
+  const { user, loading: userLoading, logout: contextLogout, refresh: contextRefresh } = useUser();
   const [email, setEmail] = useState("");
   const [clientActiveTab, setClientActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Active Billets and Colis Database states
   const [billetsState, setBilletsState] = useState<Billet[]>([]);
   const [colisState, setColisState] = useState<Colis[]>([]);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
 
   const [selectedBillet, setSelectedBillet] = useState<Billet | null>(null);
   const [selectedColis, setSelectedColis] = useState<Colis | null>(null);
@@ -71,6 +91,15 @@ export default function ClientDashboard() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isToastSuccess, setIsToastSuccess] = useState(true);
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [pointsPerTrip, setPointsPerTrip] = useState(20);
+  const [freeTripThreshold, setFreeTripThreshold] = useState(1000);
+  const [freeTripEligible, setFreeTripEligible] = useState(false);
+
+  // Notifications (voyageur)
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const lastUnreadRef = useRef(0);
 
   // Messenger Database & Interactive States
   const AGENCIES_FOR_CHATS = [
@@ -87,18 +116,22 @@ export default function ClientDashboard() {
   const [chatInputText, setChatInputText] = useState("");
   const [emailSearchInput, setEmailSearchInput] = useState("");
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+  const [editingMsgId, setEditingMsgId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [contextMenu, setContextMenu] = useState<{ visible: boolean; x: number; y: number; msg: any | null }>({ visible: false, x: 0, y: 0, msg: null });
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; msg: any | null }>({ open: false, msg: null });
+  const [hiddenMessages, setHiddenMessages] = useState<Set<number>>(new Set());
+  const [replyToMsg, setReplyToMsg] = useState<any | null>(null);
 
   const fetchMessagesForActiveThread = async (agencyIdStr: string) => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-    const token = localStorage.getItem("safetrip_token") || "";
-    const authHeaders = { "Authorization": `Bearer ${token}` };
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
     const passengerThreadId = email.split("@")[0] || "voyageur";
 
     const targetThreadId = agencyIdStr === "support" ? "support" : passengerThreadId;
     const targetAgencyId = agencyIdStr === "support" ? 1 : parseInt(agencyIdStr, 10) || 1;
 
     try {
-      const res = await fetch(`${apiBase}/api/agency/messages/${targetThreadId}?agency_id=${targetAgencyId}`, { headers: authHeaders });
+      const res = await fetch(`${apiBase}/api/agency/messages/${targetThreadId}?agency_id=${targetAgencyId}`, { credentials: "include" });
       if (res.ok) {
         const rawMsgs = await res.json();
         const mapped = rawMsgs.map((m: any) => ({
@@ -106,7 +139,9 @@ export default function ClientDashboard() {
           sender: m.sender as "agency" | "contact",
           text: m.text,
           time: m.time,
-          isRead: m.is_read
+          isRead: m.is_read,
+          reply_to_id: m.reply_to_id ?? null,
+          reply_to_text: m.reply_to_text ?? null
         }));
         setChatThreads(prev => ({
           ...prev,
@@ -115,6 +150,201 @@ export default function ClientDashboard() {
       }
     } catch (err) {
       console.warn("⚠️ Impossible de charger les messages de la base de données.", err);
+    }
+  };
+
+  const fetchClientVouchers = async () => {
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    try {
+      const res = await fetch(`${apiBase}/api/client/vouchers`, { credentials: 'include', cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setVouchers(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      setVouchers([]);
+    }
+  };
+
+  const playChime = () => {
+    try {
+      const Ctor: any = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!Ctor) return;
+      const ctx = new Ctor();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(880, ctx.currentTime);
+      g.gain.setValueAtTime(0.001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+      o.connect(g); g.connect(ctx.destination);
+      o.start();
+      o.stop(ctx.currentTime + 0.26);
+    } catch {}
+  };
+
+  const fetchNotifications = async () => {
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    try {
+      const res = await fetch(`${apiBase}/api/client/notifications`, { credentials: 'include', cache: 'no-store' });
+      if (res.ok) {
+        const list = await res.json();
+        setNotifications(list);
+        const unread = (list || []).filter((n: any) => !n.read).length;
+        setUnreadCount(unread);
+        if (unread > lastUnreadRef.current) {
+          playChime();
+        }
+        lastUnreadRef.current = unread;
+      }
+    } catch {}
+  };
+
+  const markAllNotificationsRead = async () => {
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    try {
+      const unread = (notifications || []).filter((n: any) => !n.read);
+      await Promise.all(unread.map((n: any) => fetch(`${apiBase}/api/client/notifications/${n.id}/read`, { method: 'PUT', credentials: 'include' })));
+      setNotifications((prev) => prev.map((n: any) => ({ ...n, read: true })));
+      setUnreadCount(0);
+      lastUnreadRef.current = 0;
+    } catch {}
+  };
+
+  const handleToggleNotifications = async () => {
+    const next = !showNotifications;
+    setShowNotifications(next);
+    if (next) {
+      await markAllNotificationsRead();
+    }
+  };
+
+  const handleRedeemPoints = async () => {
+    if (loyaltyPoints < freeTripThreshold) return;
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    try {
+      const res = await fetch(`${apiBase}/api/client/loyalty/redeem`, { method: 'POST', credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        const code = data?.voucher?.code;
+        showToast(code ? `Bon généré: ${code}` : 'Points échangés avec succès !');
+        setLoyaltyPoints(Math.max(0, loyaltyPoints - freeTripThreshold));
+        setFreeTripEligible(false);
+        try { await fetchClientVouchers(); } catch {}
+      } else {
+        const err = await res.json().catch(() => ({} as any));
+        showToast(err?.error || "Échec de l'échange des points.", false);
+      }
+    } catch (e) {
+      showToast("Impossible d'échanger les points.", false);
+    }
+  };
+
+  const handleOpenContextMenu = (e: React.MouseEvent, msg: any) => {
+    e.preventDefault();
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, msg });
+  };
+
+  const handleCloseContextMenu = () => {
+    setContextMenu({ visible: false, x: 0, y: 0, msg: null });
+  };
+
+  const handleContextEdit = () => {
+    if (!contextMenu.msg) return;
+    handleStartEditMessage(contextMenu.msg);
+    handleCloseContextMenu();
+  };
+
+  const handleContextReply = () => {
+    if (!contextMenu.msg) return;
+    setReplyToMsg(contextMenu.msg);
+    // Optionally prefill input with a small quote arrow
+    if (!chatInputText) setChatInputText(`↪ ${String(contextMenu.msg.text).slice(0, 40)} `);
+    handleCloseContextMenu();
+  };
+
+  const handleContextDelete = () => {
+    if (!contextMenu.msg) return;
+    setDeleteDialog({ open: true, msg: contextMenu.msg });
+    handleCloseContextMenu();
+  };
+
+  const handleDeleteForMe = () => {
+    if (!deleteDialog.msg) return;
+    setHiddenMessages(prev => new Set([...prev, deleteDialog.msg.id]));
+    setDeleteDialog({ open: false, msg: null });
+    showToast("Message supprimé pour vous ✔");
+  };
+
+  const handleDeleteForAll = async () => {
+    if (!deleteDialog.msg) return;
+    await handleDeleteMessage(deleteDialog.msg.id);
+    setDeleteDialog({ open: false, msg: null });
+  };
+
+  const handleStartEditMessage = (msg: any) => {
+    setEditingMsgId(msg.id);
+    setEditingText(msg.text || "");
+  };
+
+  const handleCancelEditMessage = () => {
+    setEditingMsgId(null);
+    setEditingText("");
+  };
+
+  const handleSaveEditMessage = async () => {
+    if (editingMsgId == null) return;
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    const passengerThreadId = email.split("@")[0] || "voyageur";
+    const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
+    const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
+    try {
+      const res = await fetch(`${apiBase}/api/agency/messages/${targetThreadId}/${editingMsgId}?agency_id=${targetAgencyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text: editingText })
+      });
+      if (res.ok) {
+        setChatThreads(prev => ({
+          ...prev,
+          [activeThreadId]: (prev[activeThreadId] || []).map((m: any) => m.id === editingMsgId ? { ...m, text: editingText } : m)
+        }));
+        showToast("Message modifié ✔");
+        setEditingMsgId(null);
+        setEditingText("");
+      } else {
+        showToast("Échec de la modification.", false);
+      }
+    } catch (err) {
+      console.warn("⚠️ Impossible de modifier le message.", err);
+      showToast("Erreur réseau lors de la modification.", false);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: number) => {
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    const passengerThreadId = email.split("@")[0] || "voyageur";
+    const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
+    const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
+    try {
+      const res = await fetch(`${apiBase}/api/agency/messages/${targetThreadId}/${msgId}?agency_id=${targetAgencyId}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (res.ok) {
+        setChatThreads(prev => ({
+          ...prev,
+          [activeThreadId]: (prev[activeThreadId] || []).filter((m: any) => m.id !== msgId)
+        }));
+        showToast("Message supprimé ✔");
+      } else {
+        showToast("Échec de la suppression.", false);
+      }
+    } catch (err) {
+      console.warn("⚠️ Impossible de supprimer le message.", err);
+      showToast("Erreur réseau lors de la suppression.", false);
     }
   };
 
@@ -131,7 +361,9 @@ export default function ClientDashboard() {
       id: Date.now(),
       sender: "contact" as const,
       text: chatInputText,
-      time: timeStr
+      time: timeStr,
+      reply_to_id: replyToMsg?.id || null,
+      reply_to_text: replyToMsg?.text || null
     };
 
     setChatThreads(prev => ({
@@ -139,21 +371,23 @@ export default function ClientDashboard() {
       [activeThreadId]: [...(prev[activeThreadId] || []), newMsg]
     }));
     setChatInputText("");
+    setReplyToMsg(null);
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-    const token = localStorage.getItem("safetrip_token") || "";
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
     try {
       await fetch(`${apiBase}/api/agency/messages/${targetThreadId}`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         },
+        credentials: "include",
         body: JSON.stringify({
           sender: "contact",
-          text: chatInputText,
+          text: newMsg.text,
           time: timeStr,
-          agency_id: targetAgencyId
+          agency_id: targetAgencyId,
+          reply_to_id: newMsg.reply_to_id,
+          reply_to_text: newMsg.reply_to_text
         })
       });
     } catch (err) {
@@ -179,8 +413,7 @@ export default function ClientDashboard() {
     if (clientActiveTab !== "messageries" || !email || !activeThreadId) return;
     
     const markAsRead = async () => {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const token = localStorage.getItem("safetrip_token") || "";
+      const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
       const passengerThreadId = email.split("@")[0] || "voyageur";
       const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
       const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
@@ -189,9 +422,9 @@ export default function ClientDashboard() {
         await fetch(`${apiBase}/api/agency/messages/${targetThreadId}/read?agency_id=${targetAgencyId}`, {
           method: "PUT",
           headers: {
-            "Authorization": `Bearer ${token}`,
             "Content-Type": "application/json"
           },
+          credentials: "include",
           body: JSON.stringify({ role: "contact" })
         });
       } catch (err) {
@@ -202,58 +435,51 @@ export default function ClientDashboard() {
     markAsRead();
   }, [clientActiveTab, activeThreadId, email, chatThreads[activeThreadId]?.length]);
 
-  // Load loyalty points on client side to avoid SSR hydration mismatch
+  // Redirect if not logged in
   useEffect(() => {
-    try {
-      const storedPoints = parseInt(localStorage.getItem("safetrip_loyalty_points") || "0", 10);
-      const completedTickets = billetsState.filter(b => b.status === "Complété");
-      setLoyaltyPoints(Math.max(storedPoints, completedTickets.length * 50));
-    } catch { /* ignore */ }
-  }, [billetsState]);
-
-  // Security Check and state loading
-  useEffect(() => {
-    const isLoggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    const role = localStorage.getItem("safetrip_user_role");
-    
-    if (!isLoggedIn || role !== "client") {
+    if (!userLoading && (!user || user.role !== "client")) {
       router.push("/login");
-      return;
     }
+  }, [user, userLoading]);
 
-    const storedEmail = localStorage.getItem("safetrip_user_email") || "";
-    setEmail(storedEmail);
+  // Set email when user is loaded
+  useEffect(() => {
+    if (user) {
+      setEmail(user.email);
+    }
+  }, [user]);
 
-    // Load profile
-    const savedProfile = localStorage.getItem("safetrip_profile");
-    if (savedProfile) {
-      try {
-        const p = JSON.parse(savedProfile);
-        if (p.fullName) setProfileFullName(p.fullName);
-        if (p.phone) setProfilePhone(p.phone);
-        if (p.address) setProfileAddress(p.address);
-        if (p.city) setProfileCity(p.city);
-        if (p.photo) setProfilePhoto(p.photo);
-      } catch { /* ignore parse errors */ }
-    } else {
-      const storedUserName = localStorage.getItem("safetrip_user_name");
-      if (storedUserName) {
-        setProfileFullName(storedUserName);
-      } else if (storedEmail) {
-        setProfileFullName(storedEmail.split("@")[0]);
+  const fetchProfile = async () => {
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    try {
+      const res = await fetch(`${apiBase}/api/client/profile`, { credentials: "include", cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setProfileFullName(data.full_name || (user ? user.fullName : ""));
+        setProfilePhone(data.phone || "");
+        setProfileAddress(data.address || "");
+        setProfileCity(data.city || "");
+        setProfilePhoto(data.photo || (user ? user.photo : null) || "/images/default_avatar.png");
+        setLoyaltyPoints(data.loyalty_points || 0);
+        setPointsPerTrip(data.points_per_trip || 20);
+        setFreeTripThreshold(data.free_trip_threshold || 1000);
+        setFreeTripEligible(Boolean(data.free_trip_eligible));
       }
+    } catch (err) {
+      console.warn("⚠️ Impossible de charger le profil depuis le backend.", err);
     }
+  };
 
-    // Hydrate tickets and package tracking from API
+  // Load profile from API and hydrate data
+  useEffect(() => {
+    if (!user) return;
+
     const hydrateClientData = async () => {
-      const clientId = localStorage.getItem("safetrip_user_id") || "client-uuid-1";
-      const token = localStorage.getItem("safetrip_token") || "";
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-      const authHeaders = { "Authorization": `Bearer ${token}` };
-
+      const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+      
       // 1. Fetch billets from API
       try {
-        const billetsRes = await fetch(`${apiBase}/api/client/billets?client_id=${clientId}`, { headers: authHeaders });
+        const billetsRes = await fetch(`${apiBase}/api/client/billets?client_id=${user.id}`, { credentials: "include" });
         if (billetsRes.ok) {
           const apiData: Billet[] = await billetsRes.json();
           setBilletsState(apiData);
@@ -267,7 +493,7 @@ export default function ClientDashboard() {
 
       // 2. Fetch colis from API
       try {
-        const colisRes = await fetch(`${apiBase}/api/client/colis?client_id=${clientId}`, { headers: authHeaders });
+        const colisRes = await fetch(`${apiBase}/api/client/colis?client_id=${user.id}`, { credentials: "include" });
         if (colisRes.ok) {
           const apiData: Colis[] = await colisRes.json();
           setColisState(apiData);
@@ -280,8 +506,14 @@ export default function ClientDashboard() {
       }
     };
 
+    fetchProfile();
     hydrateClientData();
-  }, []);
+    fetchNotifications();
+    fetchClientVouchers();
+
+    const iv = setInterval(fetchNotifications, 25000);
+    return () => clearInterval(iv);
+  }, [user]);
 
   const showToast = (message: string, isSuccess = true) => {
     setToastMessage(message);
@@ -292,12 +524,13 @@ export default function ClientDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.setItem("safetrip_logged_in", "false");
-    localStorage.removeItem("safetrip_user_role");
-    localStorage.removeItem("safetrip_token");
-    localStorage.removeItem("safetrip_user_email");
-    localStorage.removeItem("safetrip_user_name");
-    router.push("/login");
+    contextLogout();
+  };
+
+  const resolveContactValue = (value?: string | null, fallback = "Non renseigné") => {
+    if (!value) return fallback;
+    const trimmed = `${value}`.trim();
+    return trimmed.length ? trimmed : fallback;
   };
 
   const renderBarcode = (refId: string) => {
@@ -329,19 +562,49 @@ export default function ClientDashboard() {
   };
 
   const getLuggageQrPayload = (colis: Colis) => {
-    return JSON.stringify({
-      app: "SafeTrip",
-      type: "luggage",
-      luggageId: colis.id,
-      qrRef: colis.qrRef,
-      traveler: profileFullName || email.split("@")[0] || "Voyageur SafeTrip",
-      trip: colis.trip,
-      status: colis.status
-    });
+    const senderName = resolveContactValue(colis.senderName, profileFullName || email.split("@")[0] || "Voyageur SafeTrip");
+    const senderPhone = resolveContactValue(colis.senderPhone, profilePhone || "");
+    const recipientName = resolveContactValue(colis.recipientName, "Destinataire non renseigné");
+    const recipientPhone = resolveContactValue(colis.recipientPhone, "Téléphone indisponible");
+
+    return [
+      `SAFETRIP - ÉTIQUETTE BAGAGE/COLIS`,
+      `Réf: ${colis.id}`,
+      `Agence: ${colis.agency}`,
+      `-------------------------`,
+      `EXPÉDITEUR:`,
+      `Nom: ${senderName}`,
+      `Tél: ${senderPhone}`,
+      `-------------------------`,
+      `DESTINATAIRE:`,
+      `Nom: ${recipientName}`,
+      `Tél: ${recipientPhone}`
+    ].join('\n');
   };
 
   const getLuggageQrUrl = (colis: Colis, size = 180) => {
     return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=10&data=${encodeURIComponent(getLuggageQrPayload(colis))}`;
+  };
+
+  const getBilletQrPayload = (billet: Billet) => {
+    if (billet.qrToken) return `STP|v1|${billet.qrToken}`;
+    return [
+      `BILLET DE VOYAGE SAFETRIP`,
+      `Réf: ${billet.id}`,
+      `Compagnie: ${billet.company}`,
+      `-------------------------`,
+      `PASSAGER: ${billet.passenger}`,
+      `Tél: ${billet.phone}`,
+      `-------------------------`,
+      `TRAJET: ${billet.from} → ${billet.to}`,
+      `Départ: ${billet.date} à ${billet.depTime}`,
+      `Siège: ${billet.seat} (${billet.busClass})`,
+      `Bagages: ${billet.luggageCount} pièce(s)`
+    ].join('\n');
+  };
+
+  const getBilletQrUrl = (billet: Billet, size = 180) => {
+    return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=10&data=${encodeURIComponent(getBilletQrPayload(billet))}`;
   };
 
   const handleDownloadPDF = async (billet: Billet) => {
@@ -451,8 +714,10 @@ export default function ClientDashboard() {
       pdfDiv.style.cssText = "position: fixed; top: -9999px; left: -9999px; width: 420px; min-height: 640px; background: #F3F7F4; font-family: Arial, sans-serif; color: #1a202c; padding: 0; margin: 0;";
       
       const qrUrl = getLuggageQrUrl(colis, 180);
-      const dimensionsRow = colis.dimensions ? '<tr><td style="padding: 6px 0; color: #718096;">DIMENSIONS</td><td style="padding: 6px 0; font-weight: bold; color: #1a202c; text-align: right;">' + colis.dimensions + '</td></tr>' : '';
-      const fragileRow = colis.fragile ? '<tr><td style="padding: 6px 0; color: #ef4444; font-weight: 900;">ATTENTION</td><td style="padding: 6px 0; font-weight: 900; color: #ef4444; text-align: right; letter-spacing: 0.5px;">⚠️ BAGAGE FRAGILE</td></tr>' : '';
+      const senderName = resolveContactValue(colis.senderName, profileFullName || email.split("@")[0] || "Voyageur SafeTrip");
+      const senderPhone = resolveContactValue(colis.senderPhone, profilePhone || "Non renseigné");
+      const recipientName = resolveContactValue(colis.recipientName, "Destinataire non renseigné");
+      const recipientPhone = resolveContactValue(colis.recipientPhone, "Téléphone indisponible");
 
       pdfDiv.innerHTML = `
         <div style="width: 420px; padding: 14px; margin: 0; box-sizing: border-box; background: #F3F7F4;">
@@ -488,31 +753,21 @@ export default function ClientDashboard() {
             <div style="background: #F8FBF9; border: 1px solid #E2E8F0; border-radius: 18px; padding: 10px 14px;">
             <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
               <tr>
-                <td style="padding: 7px 0; color: #64748B; width: 43%; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">RÉFÉRENCE</td>
-                <td style="padding: 7px 0; font-weight: 900; color: #00673C; text-align: right; font-size: 12px;">${colis.id}</td>
+                <td style="padding: 7px 0; color: #64748B; width: 50%; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">EXPÉDITEUR</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${senderName}</td>
               </tr>
               <tr>
-                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">VOYAGEUR</td>
-                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${profileFullName || email.split("@")[0] || "Voyageur SafeTrip"}</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">CONTACT EXPÉD.</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${senderPhone}</td>
               </tr>
               <tr>
-                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">TRAJET</td>
-                <td style="padding: 7px 0; font-weight: 900; color: #0A2F1D; text-align: right;">${colis.trip}</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">DESTINATAIRE</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${recipientName}</td>
               </tr>
               <tr>
-                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">DATE DE DÉPART</td>
-                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${colis.tripDate.split(" · ")[0]}</td>
+                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">CONTACT DEST.</td>
+                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${recipientPhone}</td>
               </tr>
-              <tr>
-                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">TYPE D'OBJET</td>
-                <td style="padding: 7px 0; font-weight: 800; color: #0F172A; text-align: right;">${colis.type} (${colis.color})</td>
-              </tr>
-              <tr>
-                <td style="padding: 7px 0; color: #64748B; font-size: 9px; font-weight: 800; letter-spacing: 0.5px;">POIDS ENREGISTRÉ</td>
-                <td style="padding: 7px 0; font-weight: 950; color: #00673C; text-align: right; font-size: 14px;">${colis.weight} KG</td>
-              </tr>
-              ${dimensionsRow}
-              ${fragileRow}
             </table>
             </div>
           </div>
@@ -522,11 +777,8 @@ export default function ClientDashboard() {
             <div style="background: #ffffff; border: 3px solid #0A2F1D; border-radius: 18px; padding: 13px; box-shadow: 0 10px 22px rgba(10,47,29,0.12);">
               <img src="${qrUrl}" alt="QR Code bagage SafeTrip" style="width: 164px; height: 164px; display: block;" />
             </div>
-            <div style="font-family: monospace; font-size: 11px; font-weight: 900; color: #0A2F1D; letter-spacing: 3px;">
-              ${colis.qrRef}
-            </div>
             <div style="font-size: 9px; color: #64748B; max-width: 280px; line-height: 1.45; background: #F8FBF9; border-radius: 999px; padding: 7px 12px;">
-              À scanner en cas de perte pour retrouver l'identité du bagage.
+              À scanner en cas de perte pour retrouver l'identité du voyageur.
             </div>
           </div>
           <div style="background: #0A2F1D; padding: 14px 20px; font-size: 8px; color: rgba(255,255,255,0.72); border-top: 1px solid rgba(255,255,255,0.12); text-align: center; line-height: 1.45;">
@@ -558,17 +810,31 @@ export default function ClientDashboard() {
     }
   };
 
-  const handleProfileSave = () => {
-    const profileData = {
-      fullName: profileFullName,
-      phone: profilePhone,
-      address: profileAddress,
-      city: profileCity,
-      photo: profilePhoto
-    };
-    localStorage.setItem("safetrip_profile", JSON.stringify(profileData));
-    setProfileEditing(false);
-    showToast("Profil mis à jour avec succès ! ✅");
+  const handleProfileSave = async () => {
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
+    try {
+      const res = await fetch(`${apiBase}/api/client/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: profileFullName,
+          phone: profilePhone,
+          address: profileAddress,
+          city: profileCity,
+          photo: profilePhoto
+        }),
+        credentials: "include"
+      });
+      if (res.ok) {
+        await contextRefresh();
+        setProfileEditing(false);
+        showToast("Profil mis à jour avec succès ! ✅");
+      } else {
+        showToast("Erreur lors de la mise à jour du profil.", false);
+      }
+    } catch (err) {
+      showToast("Impossible de sauvegarder le profil.", false);
+    }
   };
 
   const handleProfilePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -585,18 +851,8 @@ export default function ClientDashboard() {
     reader.readAsDataURL(file);
   };
 
-  const handleProfileCancelEdit = () => {
-    const savedProfile = localStorage.getItem("safetrip_profile");
-    if (savedProfile) {
-      try {
-        const p = JSON.parse(savedProfile);
-        if (p.fullName) setProfileFullName(p.fullName);
-        if (p.phone) setProfilePhone(p.phone);
-        if (p.address) setProfileAddress(p.address);
-        if (p.city) setProfileCity(p.city);
-        if (p.photo) setProfilePhoto(p.photo);
-      } catch { /* ignore */ }
-    }
+  const handleProfileCancelEdit = async () => {
+    await fetchProfile();
     setProfileEditing(false);
   };
 
@@ -610,16 +866,25 @@ export default function ClientDashboard() {
 
   const completedTickets = billetsState.filter(b => b.status === "Complété");
   const completedCount = completedTickets.length;
-  const loyaltyStatus = loyaltyPoints < 100 ? "Statut Bronze" : loyaltyPoints < 300 ? "Statut Argent" : "Statut Or";
-  const nextLevelPoints = loyaltyPoints < 100 ? 100 : loyaltyPoints < 300 ? 300 : null;
-  const loyaltyProgressPct = nextLevelPoints
-    ? Math.min(100, Math.round((loyaltyPoints / nextLevelPoints) * 100))
-    : 100;
+  const pointsUntilFreeTrip = Math.max(0, freeTripThreshold - loyaltyPoints);
+  const loyaltyProgressPct = Math.min(100, Math.round((loyaltyPoints / Math.max(1, freeTripThreshold)) * 100));
+  const loyaltyStatus = freeTripEligible ? "Voyage gratuit disponible" : `+${pointsPerTrip} pts / voyage`;
+  const loyaltySubtext = freeTripEligible
+    ? "Réclamez votre trajet offert !"
+    : `${pointsUntilFreeTrip} pts avant le voyage gratuit (${freeTripThreshold} pts)`;
 
-  // Bagages et colis
-  const totalColisCount = colisState.length;
-  const transitColisCount = colisState.filter(c => c.status !== "Livré" && c.status !== "En attente de scan").length;
-  const colisSubtext = totalColisCount > 0 ? `${transitColisCount} bagage(s) en transit` : "Aucun bagage enregistré";
+  // Bagages et colis (distinguer valises/sacs des colis expédiés)
+  const BAGGAGE_TYPES = ["Valise", "Sac", "Sac à dos"];
+  const PARCEL_TYPES = ["Colis", "Carton"];
+
+  const baggageList = colisState.filter(c => BAGGAGE_TYPES.includes(c.type));
+  const parcelList = colisState.filter(c => PARCEL_TYPES.includes(c.type));
+
+  const baggagesTransit = baggageList.filter(c => c.status !== "Livré" && c.status !== "En attente de scan").length;
+  const parcelsTransit = parcelList.filter(c => c.status !== "Livré" && c.status !== "En attente de scan").length;
+
+  const baggageSubtext = baggageList.length > 0 ? `${baggagesTransit} bagage(s) en transit` : "Aucun bagage enregistré";
+  const parcelSummary = parcelList.length > 0 ? `${parcelList.length} colis suivi${parcelList.length > 1 ? "s" : ""}${parcelsTransit > 0 ? ` · ${parcelsTransit} en transit` : ""}` : "Aucun colis expédié";
 
   // Total dépensé sur les billets valides (non annulés)
   const totalSpent = billetsState
@@ -678,6 +943,19 @@ export default function ClientDashboard() {
               <line x1="16" y1="14" x2="16" y2="16" />
             </svg>
             Billets
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.sidebarNavItem} ${clientActiveTab === "bons" ? styles.sidebarNavItemActive : ""}`}
+            onClick={() => setClientActiveTab("bons")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M7 5v14M17 5v14" />
+              <path d="M9 12h6" />
+            </svg>
+            Mes bons
           </button>
 
           <button
@@ -756,11 +1034,19 @@ export default function ClientDashboard() {
             {/* Banner */}
             <div className={styles.agencyBanner} style={{ background: "linear-gradient(135deg, #00673C 0%, #1a3a2a 100%)" }}>
               <div className={styles.agencyInfo}>
-                <div className={styles.agencyLogoCircle} style={{ background: "#ffffff", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="2.5" style={{ width: "26px", height: "26px" }}>
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
+                <div className={styles.agencyLogoCircle} style={{ background: "#ffffff", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  {profilePhoto ? (
+                    <img 
+                      src={profilePhoto} 
+                      alt="Profil" 
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                    />
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="2.5" style={{ width: "26px", height: "26px" }}>
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  )}
                 </div>
                 <div className={styles.agencyText}>
                   <h1 style={{ fontSize: "1.1rem", fontWeight: 800 }}>Mon Espace Voyageur</h1>
@@ -768,6 +1054,42 @@ export default function ClientDashboard() {
                 </div>
               </div>
               <div className={styles.bannerControls}>
+                <button
+                  type="button"
+                  onClick={async () => { await fetchNotifications(); await handleToggleNotifications(); }}
+                  style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 9999, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.15)', color: '#fff', marginRight: 10 }}
+                  title="Notifications"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ width: 18, height: 18 }}>
+                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 5-3 7h18c0-2-3 0-3-7" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  {unreadCount > 0 && (
+                    <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: 9999, padding: '1px 6px', fontSize: 10, fontWeight: 800 }}>
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+                {showNotifications && (
+                  <div style={{ position: 'absolute', right: 24, top: '100%', marginTop: 8, width: 340, maxWidth: '92vw', background: '#fff', color: '#0f172a', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 14px 40px rgba(0,0,0,0.18)', overflow: 'hidden', zIndex: 50 }}>
+                    <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>Notifications</span>
+                      <button onClick={() => setShowNotifications(false)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>×</button>
+                    </div>
+                    <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                      {(notifications || []).slice(0, 20).map((n: any) => (
+                        <div key={n.id} style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9', background: n.read ? '#fff' : '#f8fafc' }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{n.title || n.type}</div>
+                          {n.body && <div style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>{n.body}</div>}
+                          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{new Date(n.created_at).toLocaleString('fr-FR')}</div>
+                        </div>
+                      ))}
+                      {(!notifications || notifications.length === 0) && (
+                        <div style={{ padding: '16px 12px', color: '#64748b', fontSize: 12 }}>Aucune notification.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>Compte : {email}</span>
               </div>
             </div>
@@ -799,10 +1121,31 @@ export default function ClientDashboard() {
                   <span className={styles.statValue}>{loyaltyPoints} pts</span>
                   <span className={styles.statTrend} style={{ color: "#744210" }}>
                     {loyaltyStatus}
-                    {nextLevelPoints && ` · ${nextLevelPoints - loyaltyPoints} pts jusqu'au niveau suivant`}
+                    {" · "}
+                    {loyaltySubtext}
                   </span>
                   <div style={{ width: "100%", height: "4px", background: "rgba(200,148,30,0.15)", borderRadius: "4px", marginTop: "6px" }}>
-                    <div style={{ width: `${loyaltyProgressPct}%`, height: "100%", background: "var(--accent-gold, #C8941E)", borderRadius: "4px", transition: "width 0.6s ease" }} />
+                    <div style={{ width: `${loyaltyProgressPct}%`, height: "100%", background: freeTripEligible ? "#0F9D58" : "var(--accent-gold, #C8941E)", borderRadius: "4px", transition: "width 0.6s ease" }} />
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      type="button"
+                      onClick={handleRedeemPoints}
+                      disabled={loyaltyPoints < freeTripThreshold}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        background: loyaltyPoints >= freeTripThreshold ? '#0F9D58' : '#f1f5f9',
+                        color: loyaltyPoints >= freeTripThreshold ? '#fff' : '#64748b',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        cursor: loyaltyPoints >= freeTripThreshold ? 'pointer' : 'not-allowed'
+                      }}
+                      title={loyaltyPoints >= freeTripThreshold ? 'Échanger mes points contre un bon' : `Atteignez ${freeTripThreshold} pts pour échanger`}
+                    >
+                      Échanger mes points
+                    </button>
                   </div>
                 </div>
               </div>
@@ -816,8 +1159,12 @@ export default function ClientDashboard() {
                 </div>
                 <div className={styles.statValueContainer}>
                   <span className={styles.statLabel}>Bagages Enregistrés</span>
-                  <span className={styles.statValue}>{totalColisCount} étiqueté{totalColisCount !== 1 ? "s" : ""}</span>
-                  <span className={styles.statTrend} style={{ color: "#3182ce" }}>{colisSubtext}</span>
+                  <span className={styles.statValue}>{baggageList.length} bagage{baggageList.length !== 1 ? "s" : ""}</span>
+                  <span className={styles.statTrend} style={{ color: "#3182ce" }}>
+                    {baggageSubtext}
+                    {" · "}
+                    {parcelSummary}
+                  </span>
                 </div>
               </div>
 
@@ -934,113 +1281,155 @@ export default function ClientDashboard() {
                   </div>
 
                   <div ref={digitalTicketRef} className={styles.digitalTicket}>
-                    <div className={styles.dtHeader}>
-                      <div className={styles.dtLogoSafe}>
-                        <img src="/images/logo-removebg-preview (2).png" alt="SafeTrip" style={{height:"32px", objectFit:"contain"}}/>
-                      </div>
-                      <div className={styles.dtSeparatorDot} />
-                      <div className={styles.dtCompanyBadge}>
-                        <img src={selectedBillet.companyLogo} alt={selectedBillet.company} style={{height:"26px", objectFit:"contain"}}/>
-                        <span>{selectedBillet.company}</span>
-                      </div>
-                      <div style={{flex:1}}/>
-                      <div className={styles.dtRef}>
-                        <span className={styles.dtRefLabel}>Référence</span>
-                        <span className={styles.dtRefValue}>{selectedBillet.id}</span>
-                      </div>
-                    </div>
+                    {(() => {
+                      const depCity = (selectedBillet.depStation || selectedBillet.from).split(' - ')[0]?.trim() || selectedBillet.from;
+                      const arrCity = (selectedBillet.arrStation || selectedBillet.to).split(' - ')[0]?.trim() || selectedBillet.to;
+                      const depCode = depCity.substring(0,3).toUpperCase();
+                      const arrCode = arrCity.substring(0,3).toUpperCase();
+                      const qrUrl = getBilletQrUrl(selectedBillet, 150);
+                      return (
+                        <div style={{width:"794px", maxWidth:"100%", background:"#ffffff", border:"2px solid rgba(230, 225, 214, 0.8)", borderRadius:24, overflow:"hidden", display:"flex", flexDirection:"row", fontFamily:"Arial, sans-serif", boxShadow:"0 15px 30px rgba(0,0,0,0.04)"}}>
+                          <div style={{width:"580px", display:"flex", flexDirection:"column", borderRight:"2px dashed rgba(230, 225, 214, 0.8)", padding:"24px 32px", boxSizing:"border-box", justifyContent:"space-between"}}>
+                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+                              <div style={{display:"flex", alignItems:"center", gap:12}}>
+                                <img src="/images/logo-removebg-preview (2).png" style={{height:36, objectFit:"contain"}} alt="SafeTrip" />
+                                <div>
+                                  <div style={{color:"#0B6B41", fontWeight:900, fontSize:18, letterSpacing:-0.5, lineHeight:1.1}}>SafeTrip</div>
+                                  <div style={{color:"#718096", fontSize:9, textTransform:"uppercase", letterSpacing:"0.8px", fontWeight:700}}>Billet Officiel de Voyage</div>
+                                </div>
+                              </div>
+                              <div style={{display:"flex", alignItems:"center"}}>
+                                <img src={selectedBillet.companyLogo} style={{height:38, objectFit:"contain", background:"#fff", borderRadius:8, padding:"4px 10px", border:"1px solid #e2e8f0"}} alt={selectedBillet.company} />
+                              </div>
+                            </div>
 
-                    <div className={styles.dtRouteSection}>
-                      <div className={styles.dtStation}>
-                        <span className={styles.dtTime}>{selectedBillet.depTime}</span>
-                        <span className={styles.dtCityBig}>{selectedBillet.from}</span>
-                        <span className={styles.dtStationSmall}>{selectedBillet.depStation}</span>
-                      </div>
-                      <div className={styles.dtMiddle}>
-                        <div className={styles.dtDot}/>
-                        <div className={styles.dtLine}>
-                          <svg viewBox="0 0 60 14" className={styles.dtBusIcon}>
-                            <rect x="2" y="3" width="56" height="8" rx="2" fill="currentColor"/>
-                            <circle cx="10" cy="12" r="2.5" fill="currentColor"/>
-                            <circle cx="50" cy="12" r="2.5" fill="currentColor"/>
-                            <rect x="8" y="3" width="8" height="4" rx="1" fill="rgba(255,255,255,0.4)"/>
-                            <rect x="20" y="3" width="8" height="4" rx="1" fill="rgba(255,255,255,0.4)"/>
-                            <rect x="32" y="3" width="8" height="4" rx="1" fill="rgba(255,255,255,0.4)"/>
-                            <rect x="44" y="3" width="8" height="4" rx="1" fill="rgba(255,255,255,0.4)"/>
-                          </svg>
-                        </div>
-                        <div className={styles.dtDot}/>
-                        <div className={styles.dtDurationBadge}>{selectedBillet.duration}</div>
-                      </div>
-                      <div className={styles.dtStation} style={{textAlign:"right",alignItems:"flex-end"}}>
-                        <span className={styles.dtTime}>{selectedBillet.arrTime}</span>
-                        <span className={styles.dtCityBig}>{selectedBillet.to}</span>
-                        <span className={styles.dtStationSmall}>{selectedBillet.arrStation}</span>
-                      </div>
-                    </div>
+                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", margin:"20px 0"}}>
+                              <div>
+                                <div style={{fontSize:9, color:"#a0aec0", textTransform:"uppercase", letterSpacing:"1px", fontWeight:700}}>Départ</div>
+                                <div style={{fontSize:28, fontWeight:900, color:"#071A0E", lineHeight:1}}>{depCity}</div>
+                              </div>
+                              <div style={{textAlign:"center", flex:1, padding:"0 20px", display:"flex", flexDirection:"column", alignItems:"center", gap:4}}>
+                                <div style={{fontSize:11, fontWeight:800, color:"#0B6B41"}}>{selectedBillet.company}</div>
+                                <div style={{width:"100%", height:2, background:"#00c070", position:"relative"}}>
+                                  <div style={{width:8, height:8, borderRadius:"50%", background:"#0B6B41", position:"absolute", top:-3, left:"calc(50% - 4px)"}}></div>
+                                </div>
+                                <div style={{fontSize:9, color:"#718096", fontWeight:700, background:"#f7fafc", padding:"2px 8px", borderRadius:10, border:"1px solid #edf2f7"}}>{selectedBillet.duration}</div>
+                              </div>
+                              <div style={{textAlign:"right"}}>
+                                <div style={{fontSize:9, color:"#a0aec0", textTransform:"uppercase", letterSpacing:"1px", fontWeight:700}}>Arrivée</div>
+                                <div style={{fontSize:28, fontWeight:900, color:"#071A0E", lineHeight:1}}>{arrCity}</div>
+                              </div>
+                            </div>
 
-                    <div className={styles.dtPerforated}>
-                      <div className={styles.dtCircleLeft}/>
-                      <div className={styles.dtDots}/>
-                      <div className={styles.dtCircleRight}/>
-                    </div>
+                            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:15, marginBottom:10}}>
+                              <div style={{background:"#f7fffa", border:"1px solid rgba(11,107,65,0.06)", borderRadius:12, padding:"10px 14px"}}>
+                                <div style={{fontSize:8, color:"#718096", textTransform:"uppercase", letterSpacing:"0.8px", fontWeight:800}}>Passager</div>
+                                <div style={{fontSize:14, fontWeight:800, color:"#071A0E", marginTop:2}}>{selectedBillet.passenger.toUpperCase()}</div>
+                                <div style={{fontSize:9, color:"#718096", marginTop:1}}>{selectedBillet.phone}</div>
+                              </div>
+                              <div style={{background:"#f7fffa", border:"1px solid rgba(11,107,65,0.06)", borderRadius:12, padding:"10px 14px"}}>
+                                <div style={{fontSize:8, color:"#718096", textTransform:"uppercase", letterSpacing:"0.8px", fontWeight:800}}>Date & Heure</div>
+                                <div style={{fontSize:13, fontWeight:800, color:"#071A0E", marginTop:2}}>{selectedBillet.date}</div>
+                                <div style={{fontSize:10, color:"#0B6B41", fontWeight:700, marginTop:1}}>{selectedBillet.depTime} → {selectedBillet.arrTime}</div>
+                              </div>
+                            </div>
 
-                    <div className={styles.dtDetails}>
-                      <div className={styles.dtDetailsGrid}>
-                        <div className={styles.dtDetailItem}>
-                          <span className={styles.dtDetailLabel}>Passager</span>
-                          <span className={styles.dtDetailValue}>{selectedBillet.passenger}</span>
+                            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", background:"#fafafa", padding:"10px 18px", borderRadius:10}}>
+                              <div style={{fontSize:9, color:"#718096", fontWeight:700}}>Siège: <strong style={{color:"#0B6B41", fontSize:11}}>{selectedBillet.seat}</strong></div>
+                              <div style={{fontSize:9, color:"#718096", fontWeight:700}}>Classe: <strong style={{color:"#071A0E", fontSize:11}}>{selectedBillet.busClass}</strong></div>
+                              <div style={{fontSize:9, color:"#718096", fontWeight:700}}>Tarif: <strong style={{color:"#c49000", fontSize:11}}>{selectedBillet.price.toLocaleString("fr-CM")} FCFA</strong></div>
+                            </div>
+                          </div>
+                          <div style={{width:214, background:"#f7fafc", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px 16px", boxSizing:"border-box", textAlign:"center", position:"relative"}}>
+                            <div style={{position:"absolute", top:-12, left:-12, width:24, height:24, background:"#EDE9DF", borderRadius:"50%", border:"1px solid rgba(230, 225, 214, 0.8)"}}></div>
+                            <div style={{position:"absolute", bottom:-12, left:-12, width:24, height:24, background:"#EDE9DF", borderRadius:"50%", border:"1px solid rgba(230, 225, 214, 0.8)"}}></div>
+                            <div style={{fontSize:9, fontWeight:800, color:"#718096", textTransform:"uppercase", letterSpacing:1, marginBottom:8}}>Billet Unique</div>
+                            <div style={{background:"#ffffff", border:"2px solid rgba(11, 107, 65, 0.15)", borderRadius:16, padding:8, boxShadow:"0 8px 20px rgba(0,0,0,0.03)", marginBottom:12}}>
+                              <img src={qrUrl} alt={`QR ${selectedBillet.id}`} style={{width:115, height:115, display:"block"}} />
+                            </div>
+                            <div style={{fontFamily:"monospace", fontSize:11, fontWeight:800, color:"#0B6B41", letterSpacing:0.5, marginBottom:4}}>{selectedBillet.id}</div>
+                            <div style={{fontSize:9, fontWeight:700, color:"#2d3748", maxWidth:180, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{selectedBillet.passenger.toUpperCase()}</div>
+                            <div style={{fontSize:8, color:"#a0aec0", marginTop:10}}>Scannez pour valider l'accès 🇨🇲</div>
+                            {selectedBillet.ticketScanned && (
+                              <div style={{marginTop:10, fontSize:10, color:"#b91c1c", fontWeight:800}}>Déjà scanné</div>
+                            )}
+                          </div>
                         </div>
-                        <div className={styles.dtDetailItem}>
-                          <span className={styles.dtDetailLabel}>Date</span>
-                          <span className={styles.dtDetailValue}>{selectedBillet.date}</span>
-                        </div>
-                        <div className={styles.dtDetailItem}>
-                          <span className={styles.dtDetailLabel}>Siège</span>
-                          <span className={styles.dtDetailValue}>{selectedBillet.seat}</span>
-                        </div>
-                        <div className={styles.dtDetailItem}>
-                          <span className={styles.dtDetailLabel}>Classe</span>
-                          <span className={styles.dtDetailValue}>{selectedBillet.busClass}</span>
-                        </div>
-                        <div className={styles.dtDetailItem}>
-                          <span className={styles.dtDetailLabel}>Bagages</span>
-                          <span className={styles.dtDetailValue}>{selectedBillet.luggageCount} pièce{selectedBillet.luggageCount !== 1 ? "s" : ""}</span>
-                        </div>
-                        <div className={styles.dtDetailItem}>
-                          <span className={styles.dtDetailLabel}>Tarif</span>
-                          <span className={styles.dtDetailValue} style={{color:"#4ade80",fontWeight:800}}>{selectedBillet.price.toLocaleString("fr-CM")} FCFA</span>
-                        </div>
-                      </div>
-                      <div className={styles.dtQRSection}>
-                        <div className={styles.dtQRBox}>
-                          <svg viewBox="0 0 100 100" className={styles.dtQRSvg}>
-                            <rect x="5" y="5" width="35" height="35" rx="3" fill="none" stroke="currentColor" strokeWidth="4"/>
-                            <rect x="14" y="14" width="18" height="18" rx="1" fill="currentColor"/>
-                            <rect x="60" y="5" width="35" height="35" rx="3" fill="none" stroke="currentColor" strokeWidth="4"/>
-                            <rect x="69" y="14" width="18" height="18" rx="1" fill="currentColor"/>
-                            <rect x="5" y="60" width="35" height="35" rx="3" fill="none" stroke="currentColor" strokeWidth="4"/>
-                            <rect x="14" y="69" width="18" height="18" rx="1" fill="currentColor"/>
-                            <rect x="60" y="60" width="10" height="10" rx="1" fill="currentColor"/>
-                            <rect x="75" y="60" width="10" height="10" rx="1" fill="currentColor"/>
-                            <rect x="60" y="75" width="10" height="10" rx="1" fill="currentColor"/>
-                            <rect x="75" y="75" width="10" height="10" rx="1" fill="currentColor"/>
-                            <rect x="85" y="60" width="10" height="25" rx="1" fill="currentColor"/>
-                            <rect x="45" y="5" width="8" height="8" rx="1" fill="currentColor"/>
-                            <rect x="45" y="18" width="8" height="8" rx="1" fill="currentColor"/>
-                            <rect x="45" y="31" width="8" height="8" rx="1" fill="currentColor"/>
-                          </svg>
-                        </div>
-                        <span className={styles.dtQRLabel}>Scanner pour valider</span>
-                        <span className={`${styles.dtStatusBadge} ${selectedBillet.status === "Actif" ? styles.dtStatusActive : styles.dtStatusDone}`}>
-                          {selectedBillet.status === "Actif" ? "● ACTIF" : "✓ COMPLÉTÉ"}
-                        </span>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {clientActiveTab === "bons" && (
+          <div className={styles.tabContentFadeIn}>
+            <div className={styles.billetPageHeader}>
+              <div>
+                <h2 className={styles.billetPageTitle} style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"18px",height:"18px",color:"#00673C"}}>
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <path d="M7 5v14M17 5v14" />
+                    <path d="M9 12h6" />
+                  </svg>
+                  Mes bons de réduction
+                </h2>
+                <p className={styles.billetPageSub}>{vouchers.length} bon{vouchers.length > 1 ? 's' : ''} disponible{vouchers.length > 1 ? 's' : ''}</p>
+              </div>
+            </div>
+
+            <div className={styles.billetList}>
+              {vouchers.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px", color: "rgba(0,0,0,0.4)", fontSize: "0.85rem", background: "rgba(0,0,0,0.02)", borderRadius: "12px", border: "1px dashed rgba(0,0,0,0.05)" }}>
+                  Aucun bon disponible pour le moment.
+                </div>
+              ) : (
+                vouchers.map(v => (
+                  <div key={v.id || v.code} className={styles.billetCard}>
+                    <div className={`${styles.billetStripe} ${v.status === 'published' ? styles.billetStripeActive : styles.billetStripeCompleted}`} />
+
+                    <div className={styles.billetCardBody}>
+                      <div className={styles.billetRoute} style={{alignItems:'center'}}>
+                        <div className={styles.billetCity} style={{fontFamily:'monospace'}}>{v.code}</div>
+                        <div className={styles.billetArrow}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={styles.billetArrowIcon}>
+                            <path d="M5 12h14M12 5l7 7-7 7"/>
+                          </svg>
+                          <span className={styles.billetDuration}>{v.percentage}%</span>
+                        </div>
+                        <div className={styles.billetCity}>{v.status === 'published' ? 'Actif' : 'Brouillon'}</div>
+                      </div>
+
+                      <div className={styles.billetMeta}>
+                        <span className={styles.billetMetaItem}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}>
+                            <rect x="2" y="7" width="20" height="14" rx="2"/>
+                          </svg>
+                          {v.current_uses}/{v.max_uses} utilisation{(v.max_uses || 0) > 1 ? 's' : ''}
+                        </span>
+                        <span className={styles.billetMetaItem}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{width:"13px",height:"13px"}}>
+                            <path d="M3 12h18M12 3v18"/>
+                          </svg>
+                          Expire: {v.expires_at ? new Date(v.expires_at).toLocaleDateString('fr-FR') : '—'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.billetCardRight}>
+                      <button
+                        className={styles.voirBilletBtn}
+                        onClick={async () => { try { await navigator.clipboard.writeText(v.code); showToast('Code copié ! ✅'); } catch { showToast('Impossible de copier', false); } }}
+                      >
+                        Copier le code
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
 
@@ -1120,13 +1509,13 @@ export default function ClientDashboard() {
                       <div className={styles.billetCardRight}>
                         <div className={styles.colisRef}>{colis.id}</div>
                         <span className={`${styles.billetStatus} ${isActive ? styles.billetStatusActive : isDelivered ? styles.colisStatusDelivered : styles.billetStatusCompleted}`}>
-                          {isActive ? "En cours" : isDelivered ? "Livré" : "En attente"}
+                          {isActive ? "En cours" : "Livré"}
                         </span>
                         <button
                           className={styles.voirBilletBtn}
                           onClick={() => setSelectedColis(colis)}
                         >
-                          Suivre le colis
+                          Voir mon ticket
                         </button>
                       </div>
                     </div>
@@ -1214,13 +1603,13 @@ export default function ClientDashboard() {
                       <div className={styles.billetCardRight}>
                         <div className={styles.colisRef}>{colis.id}</div>
                         <span className={`${styles.billetStatus} ${isActive ? styles.billetStatusActive : isDelivered ? styles.colisStatusDelivered : styles.billetStatusCompleted}`}>
-                          {isActive ? "En cours" : isDelivered ? "Livré" : "En attente"}
+                          {isActive ? "En cours" : "Livré"}
                         </span>
                         <button
                           className={styles.voirBilletBtn}
                           onClick={() => setSelectedColis(colis)}
                         >
-                          Suivre le bagage
+                          Voir mon ticket
                         </button>
                       </div>
                     </div>
@@ -1279,63 +1668,22 @@ export default function ClientDashboard() {
                       </div>
                     </div>
 
-                    <div className={styles.dlRouteBanner}>
-                      <div>
-                        <div className={styles.dlRouteLabel}>Trajet</div>
-                        <div className={styles.dlRouteCities}>{selectedColis.trip.split(" → ")[0]}</div>
-                      </div>
-                      <div className={styles.dlRouteArrow}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="5" y1="12" x2="19" y2="12" />
-                          <polyline points="12 5 19 12 12 19" />
-                        </svg>
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div className={styles.dlRouteLabel}>Destination</div>
-                        <div className={styles.dlRouteCities}>{selectedColis.trip.split(" → ")[1]}</div>
-                      </div>
-                    </div>
-
-                    <div className={styles.dlMainBody}>
+                     <div className={styles.dlMainBody}>
                       <div className={styles.dlDetailsGrid}>
                         <div className={styles.dlDetailItem}>
-                          <span className={styles.dlDetailLabel}>Voyageur</span>
-                          <span className={styles.dlDetailValue}>{profileFullName || email.split("@")[0] || "Voyageur SafeTrip"}</span>
+                          <span className={styles.dlDetailLabel}>Expéditeur</span>
+                          <span className={styles.dlDetailValue}>{resolveContactValue(selectedColis.senderName, profileFullName || email.split("@")[0] || "Voyageur SafeTrip")}</span>
+                          <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#ffffff", marginTop: "2px", display: "block" }}>
+                            {resolveContactValue(selectedColis.senderPhone, profilePhone || "Téléphone indisponible")}
+                          </span>
                         </div>
                         <div className={styles.dlDetailItem}>
-                          <span className={styles.dlDetailLabel}>Date départ</span>
-                          <span className={styles.dlDetailValue}>{selectedColis.tripDate.split(" · ")[0]}</span>
+                          <span className={styles.dlDetailLabel}>Destinataire</span>
+                          <span className={styles.dlDetailValue}>{resolveContactValue(selectedColis.recipientName, "Destinataire non renseigné")}</span>
+                          <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#ffffff", marginTop: "2px", display: "block", textAlign: "right" }}>
+                            {resolveContactValue(selectedColis.recipientPhone, "Téléphone indisponible")}
+                          </span>
                         </div>
-                        <div className={styles.dlDetailItem}>
-                          <span className={styles.dlDetailLabel}>Type d'objet</span>
-                          <span className={styles.dlDetailValue}>{selectedColis.type} ({selectedColis.color})</span>
-                        </div>
-                        <div className={styles.dlDetailItem}>
-                          <span className={styles.dlDetailLabel}>Poids enregistré</span>
-                          <span className={styles.dlDetailValueHigh}>{selectedColis.weight} kg</span>
-                        </div>
-                        {selectedColis.dimensions && (
-                          <div className={styles.dlDetailItem}>
-                            <span className={styles.dlDetailLabel}>Dimensions</span>
-                            <span className={styles.dlDetailValue}>{selectedColis.dimensions}</span>
-                          </div>
-                        )}
-                        {selectedColis.fragile && (
-                          <div className={styles.dlDetailItem} style={{ display:"flex", justifyContent: "center" }}>
-                            <span className={styles.dlFragileBadge}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{width:"10px",height:"10px"}}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                              FRAGILE
-                            </span>
-                          </div>
-                        )}
-                        {selectedColis.notes && (
-                          <div className={styles.dlDetailItemFull}>
-                            <span className={styles.dlDetailLabel}>Notes de l'agent</span>
-                            <span className={styles.dlDetailValue} style={{ fontSize: "0.75rem", fontStyle: "italic", color: "rgba(255,255,255,0.7)" }}>
-                              {selectedColis.notes}
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -1367,13 +1715,14 @@ export default function ClientDashboard() {
                       
                       <div className={styles.dlStatusRow}>
                         <span className={styles.dlLogoBranding}>SafeTrip LUGGAGE</span>
-                        <span className={
-                          selectedColis.status === "Livré" ? styles.dlStatusLabelBadgeDelivered :
-                          selectedColis.status === "En attente de scan" ? styles.dlStatusLabelBadgePending :
-                          styles.dlStatusLabelBadge
-                        }>
-                          {selectedColis.status}
-                        </span>
+                        {selectedColis.status !== "En attente de scan" && (
+                          <span className={
+                            selectedColis.status === "Livré" ? styles.dlStatusLabelBadgeDelivered :
+                            styles.dlStatusLabelBadge
+                          }>
+                            {selectedColis.status}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1592,7 +1941,7 @@ export default function ClientDashboard() {
                       <div style={{ fontSize: "0.7rem", color: "#cbd5e0", marginTop: "4px" }}>Envoyez un message pour démarrer l'assistance en direct.</div>
                     </div>
                   ) : (
-                    (chatThreads[activeThreadId] || []).map(msg => {
+                    (chatThreads[activeThreadId] || []).filter(m => !hiddenMessages.has(m.id)).map(msg => {
                       const isSent = msg.sender === "contact";
                       return (
                         <div
@@ -1605,10 +1954,32 @@ export default function ClientDashboard() {
                             padding: "10px 14px",
                             borderRadius: isSent ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
                             boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
-                            position: "relative"
+                            position: "relative",
+                            cursor: "context-menu"
                           }}
+                          onContextMenu={(e) => handleOpenContextMenu(e, msg)}
                         >
-                          <div style={{ fontSize: "0.8rem", fontWeight: 600, lineHeight: 1.45 }}>{msg.text}</div>
+                          {editingMsgId === msg.id ? (
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <input
+                                value={editingText}
+                                onChange={(e) => setEditingText(e.target.value)}
+                                style={{ flex: 1, fontSize: "0.8rem", padding: "6px 8px", borderRadius: 8, border: "1px solid #e2e8f0", color: "#1a202c" }}
+                              />
+                              <button onClick={handleSaveEditMessage} style={{ background: "#22c55e", color: "#fff", border: 0, borderRadius: 8, padding: "6px 10px", fontSize: "0.75rem", fontWeight: 800 }}>Sauver</button>
+                              <button onClick={handleCancelEditMessage} style={{ background: "#ef4444", color: "#fff", border: 0, borderRadius: 8, padding: "6px 10px", fontSize: "0.75rem", fontWeight: 800 }}>Annuler</button>
+                            </div>
+                          ) : (
+                            <div>
+                              {msg.reply_to_id && (
+                                <div style={{ fontSize: "0.68rem", background: isSent ? "rgba(255,255,255,0.15)" : "#e2e8f0", color: isSent ? "#f1f5f9" : "#4a5568", borderLeft: `3px solid ${isSent ? '#FCD116' : '#00673C'}`, padding: "6px 8px", borderRadius: 6, marginBottom: 6 }}>
+                                  <span style={{ fontWeight: 800, marginRight: 6 }}>Réponse à</span>
+                                  <span style={{ opacity: 0.9 }}>{(msg.reply_to_text || (chatThreads[activeThreadId] || []).find((m:any)=>m.id===msg.reply_to_id)?.text || 'Message inconnu').slice(0, 120)}</span>
+                                </div>
+                              )}
+                              <div style={{ fontSize: "0.8rem", fontWeight: 600, lineHeight: 1.45 }}>{msg.text}</div>
+                            </div>
+                          )}
                           <div style={{ 
                             fontSize: "0.6rem", 
                             color: isSent ? "rgba(255,255,255,0.7)" : "#a0aec0", 
@@ -1641,6 +2012,35 @@ export default function ClientDashboard() {
                     })
                   )}
                 </div>
+
+                {/* Context Menu for messages */}
+                {contextMenu.visible && contextMenu.msg && (
+                  <div
+                    onMouseLeave={handleCloseContextMenu}
+                    style={{ position: "fixed", top: contextMenu.y, left: contextMenu.x, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, boxShadow: "0 10px 22px rgba(0,0,0,0.12)", zIndex: 9999, minWidth: 180 }}
+                  >
+                    {contextMenu.msg.sender === "contact" ? (
+                      <div>
+                        <button onClick={handleContextEdit} style={{ width: "100%", padding: "10px 12px", textAlign: "left", background: "transparent", border: 0, cursor: "pointer", fontSize: "0.8rem", fontWeight: 800 }}>Modifier</button>
+                        <button onClick={handleContextDelete} style={{ width: "100%", padding: "10px 12px", textAlign: "left", background: "transparent", border: 0, cursor: "pointer", fontSize: "0.8rem", fontWeight: 800, color: "#c53030" }}>Supprimer…</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <button onClick={handleContextReply} style={{ width: "100%", padding: "10px 12px", textAlign: "left", background: "transparent", border: 0, cursor: "pointer", fontSize: "0.8rem", fontWeight: 800 }}>Répondre</button>
+                        <button onClick={handleContextDelete} style={{ width: "100%", padding: "10px 12px", textAlign: "left", background: "transparent", border: 0, cursor: "pointer", fontSize: "0.8rem", fontWeight: 800, color: "#c53030" }}>Supprimer…</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Reply banner */}
+                {replyToMsg && (
+                  <div style={{ padding: "6px 20px", borderTop: "1px solid #edf2f7", background: "#f8fafc", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#4a5568" }}>Réponse à:</span>
+                    <span style={{ fontSize: "0.72rem", color: "#718096", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{String(replyToMsg.text).slice(0, 90)}</span>
+                    <button onClick={() => setReplyToMsg(null)} style={{ marginLeft: "auto", background: "transparent", border: 0, cursor: "pointer", color: "#a0aec0", fontWeight: 900 }}>×</button>
+                  </div>
+                )}
 
                 {/* Input Area */}
                 <form onSubmit={handleSendPassengerMessage} style={{
@@ -1691,6 +2091,25 @@ export default function ClientDashboard() {
                     ➤
                   </button>
                 </form>
+
+                {/* Delete dialog */}
+                {deleteDialog.open && (
+                  <div className={styles.billetModalOverlay} onClick={() => setDeleteDialog({ open: false, msg: null })}>
+                    <div className={styles.billetModalWrapper} onClick={(e) => e.stopPropagation()} style={{ maxWidth: "360px" }}>
+                      <div className={styles.billetModalTopBar}>
+                        <span className={styles.billetModalTopLabel}>Supprimer le message</span>
+                      </div>
+                      <div className={styles.billetModalBody} style={{ padding: 18 }}>
+                        <p style={{ fontSize: "0.9rem", color: "#4a5568", marginBottom: 14 }}>Choisissez l'action de suppression.</p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          <button className={styles.downloadPdfBtn} onClick={handleDeleteForMe}>Supprimer pour moi</button>
+                          <button className={styles.deleteBtn || styles.downloadPdfBtn} onClick={handleDeleteForAll} style={{ background: "#ef4444" }}>Supprimer pour nous</button>
+                          <button className={styles.voirBilletBtn} onClick={() => setDeleteDialog({ open: false, msg: null })}>Annuler</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

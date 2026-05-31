@@ -1,0 +1,85 @@
+# État d’avancement — Fidélité, Bons, Notifications temps réel
+
+Dernière mise à jour: 2026-05-31
+
+## Résumé
+- Objectif: Mettre en place un système de fidélité (échange de points contre bons), afficher les bons dans le tableau de bord client, et intégrer des notifications temps réel (remplacement du polling par WebSocket). Créer un back-office pour la gestion des bons.
+- Focus actuel: Notifications « Réponse agence » (Option A) et section « Mes bons » (voyageur).
+
+## Réalisé
+- Notifications « Réponse agence » — Option A (heuristique)
+  - Backend: `backend/src/controllers/agencyController.ts`
+    - Lorsqu’une agence répond (`sender='agency'`) sur un fil dont `threadId` correspond au local-part d’un email client (ex: `jean.dupont` → `jean.dupont@...`), création d’une notification: `type='agency_replied'`, `title="Réponse de l'agence"`, `body=<aperçu du message>`.
+    - Insertion en base: table `notifications` (via Supabase).
+  - Frontend: le polling existant côté client récupère cette nouvelle notification et met à jour le compteur non lu.
+
+- Section « Mes bons » (voyageur)
+  - Backend (déjà existant): `GET /api/client/vouchers` retourne les bons du client connecté.
+  - Frontend: `frontend/src/app/client/dashboard/page.tsx`
+    - Ajout du type `Voucher`, de l’état `vouchers` et de la fonction `fetchClientVouchers()` (appel `GET /api/client/vouchers`).
+    - Intégration dans l’hydratation initiale (useEffect) pour charger les bons au chargement.
+    - Intégration dans `handleRedeemPoints()` pour recharger les bons après un échange réussi (et afficher le code généré dans un toast).
+    - Nouveau bouton de barre latérale « Mes bons » et nouvel onglet listant les bons (code, pourcentage, utilisations courant/max, statut Actif/Brouillon, expiration).
+    - Bouton « Copier le code » (copie presse-papiers + toast succès/erreur).
+
+## À faire
+- Back-office des bons (admin)
+  - API (protégée/admin):
+    - [ ] `POST /api/admin/vouchers` (créer)
+    - [ ] `GET /api/admin/vouchers` (lister/paginer/filtrer)
+    - [ ] `PUT /api/admin/vouchers/:id` (modifier; publication `status=published`, mise à jour `percentage`, `max_uses`, `expires_at`, assignation `assigned_to`…)
+    - [ ] `DELETE /api/admin/vouchers/:id` (supprimer/désactiver)
+  - UI Admin:
+    - [ ] Écran liste (recherche, filtres: statut, assignation, expiration)
+    - [ ] Formulaire création/édition (validation des champs)
+    - [ ] Actions rapides: publier/dépublier, assigner à un client, réinitialiser `current_uses`
+  - Sécurité/Permissions:
+    - [ ] Vérifier rôles (admin) côté serveur et côté client (guard)
+
+- Notifications temps réel (WebSocket)
+  - Serveur:
+    - [ ] Mise en place Socket.IO côté backend (auth cookie/JWT, rooms par utilisateur/entité)
+    - [ ] Émission d’événements sur création de notifications (`luggage_scanned`, `ticket_validated`, `parcel_delivered`, `agency_replied`, `booking_created`, `parcel_request_created`…)
+  - Clients (voyageur et agence):
+    - [ ] Connexion Socket.IO, écoute des événements, mise à jour du store/états (liste + compteur non lu)
+    - [ ] Marquage « lu » en temps réel lors de l’ouverture du panneau
+  - Migration progressive:
+    - [ ] Garder un fallback par polling (feature flag) puis le désactiver une fois validé
+
+- Décisions et extensions à valider
+  - [ ] Bons à montant fixe (FCFA) en plus du pourcentage (impact: schéma, backend, UI)
+  - [ ] Règles de cumul (un bon à la fois ?), champs conditions (min panier, routes éligibles…)
+  - [ ] Limiter l’usage: par utilisateur, par période, par canal, etc.
+
+- Qualité, sécurité, robustesse
+  - [ ] Validation d’entrées serveur (Zod/validators) pour les endpoints admin
+  - [ ] Indices DB et cohérence (index sur `notifications.client_id`, `vouchers.assigned_to`, `status`, `expires_at`)
+  - [ ] Gestion fuseaux horaires pour `expires_at`
+  - [ ] Tests manuels + unitaires (génération bon, échange points, notifications, CRUD admin)
+  - [ ] Journalisation et observabilité (logs d’actions admin, erreurs Socket.IO)
+
+## Tests manuels (checklist)
+- Voyaguer (client)
+  - [ ] Voir l’onglet « Mes bons » et la liste des bons
+  - [ ] Copier un code avec le bouton (toast OK)
+  - [ ] Échanger 1000 points → bon généré → visible dans « Mes bons »
+  - [ ] Recevoir une notification « Réponse de l’agence » sur fil correspondant (après polling ou en temps réel quand WebSocket sera actif)
+
+- Admin (à venir)
+  - [ ] Créer un bon (draft)
+  - [ ] Publier un bon
+  - [ ] Assigner un bon à un client
+  - [ ] Modifier `percentage`, `max_uses`, `expires_at`
+  - [ ] Supprimer/Désactiver un bon
+
+## Références techniques
+- Backend
+  - Contrôleurs clés: `backend/src/controllers/clientController.ts`, `backend/src/controllers/agencyController.ts`
+  - Schéma: `backend/schema.sql`, migrations associées
+- Frontend
+  - Dashboard client: `frontend/src/app/client/dashboard/page.tsx`
+
+## Propositions de prochaines étapes
+1) Implémenter le back-office des bons (admin) avec contrôle d’accès et validations.
+2) Intégrer Socket.IO pour le temps réel et désactiver progressivement le polling.
+3) Éventuellement étendre le modèle de bon (montant fixe, conditions d’éligibilité, règles de cumul).

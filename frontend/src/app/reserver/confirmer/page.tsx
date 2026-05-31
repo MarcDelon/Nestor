@@ -3,6 +3,7 @@
 import styles from "./page.module.css";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useUser } from "@/components/UserContext";
 
 interface Journey {
   id: number;
@@ -94,6 +95,7 @@ function SeatIcon({ id, isSelected, isOccupied, isVip, onClick }: SeatIconProps)
 }
 
 export default function ConfirmerReservation() {
+  const { user } = useUser();
   const [step, setStep] = useState(1); // 1=seat, 2=payment, 3=ticket
   const [journey, setJourney] = useState<Journey | null>(null);
   const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
@@ -109,6 +111,7 @@ export default function ConfirmerReservation() {
   const [occupiedSeats, setOccupiedSeats] = useState<string[]>([]);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "collecting" | "pending_ussd" | "success" | "failed">("idle");
   const [payunitRef, setPayunitRef] = useState("");
+  const [qrToken, setQrToken] = useState<string | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isToastSuccess, setIsToastSuccess] = useState(true);
@@ -162,8 +165,8 @@ export default function ConfirmerReservation() {
   }, [occupiedSeats, isVipBus, journey?.busCapacity]);
 
   useEffect(() => {
-    // Read booked journey from localStorage
-    const saved = localStorage.getItem("safetrip_booking_journey");
+    // Read booked journey from sessionStorage
+    const saved = sessionStorage.getItem("safetrip_booking_journey");
     let journeyId = 0;
     if (saved) {
       const parsedJourney = JSON.parse(saved);
@@ -171,19 +174,10 @@ export default function ConfirmerReservation() {
       journeyId = parsedJourney.id;
     }
 
-    // Read client info
-    const activeEmail = localStorage.getItem("safetrip_user_email") || "";
-    setClientEmail(activeEmail);
-    setClientName(localStorage.getItem("safetrip_user_name") || activeEmail.split("@")[0] || "Voyageur SafeTrip");
-    setClientPhone(localStorage.getItem("safetrip_user_phone") || "+237 600 00 00 00");
-
-    // Generate ticket ID
-    setTicketId(`ST-${new Date().getFullYear()}-${String(Date.now()).slice(-7)}`);
-
     // Fetch occupied seats for this journey from the backend
     if (journeyId) {
       const fetchOccupiedSeats = async () => {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
         try {
           const res = await fetch(`${apiBase}/api/agency/journeys/${journeyId}/occupied-seats`);
           if (res.ok) {
@@ -197,6 +191,20 @@ export default function ConfirmerReservation() {
       fetchOccupiedSeats();
     }
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setClientEmail(user.email || "");
+      setClientName(user.fullName || user.email.split("@")[0] || "Voyageur SafeTrip");
+      setClientPhone("+237 600 00 00 00");
+    } else {
+      setClientEmail("");
+      setClientName("Voyageur SafeTrip");
+      setClientPhone("+237 600 00 00 00");
+    }
+    // Generate ticket ID
+    setTicketId(`ST-${new Date().getFullYear()}-${String(Date.now()).slice(-7)}`);
+  }, [user]);
 
   // Compute final price after voucher discount
   const finalPrice = journey
@@ -212,7 +220,7 @@ export default function ConfirmerReservation() {
       return;
     }
     try {
-      const vouchers: any[] = JSON.parse(localStorage.getItem("safetrip_vouchers") || "[]");
+      const vouchers: any[] = JSON.parse(sessionStorage.getItem("safetrip_vouchers") || "[]");
       const voucher = vouchers.find(
         (v: any) => v.code.toUpperCase() === voucherCode.trim().toUpperCase()
       );
@@ -238,18 +246,18 @@ export default function ConfirmerReservation() {
   const consumeVoucher = () => {
     if (!appliedVoucher) return;
     try {
-      const vouchers: any[] = JSON.parse(localStorage.getItem("safetrip_vouchers") || "[]");
+      const vouchers: any[] = JSON.parse(sessionStorage.getItem("safetrip_vouchers") || "[]");
       const updated = vouchers.map((v: any) =>
         v.code === appliedVoucher.code ? { ...v, currentUses: v.currentUses + 1 } : v
       );
-      localStorage.setItem("safetrip_vouchers", JSON.stringify(updated));
+      sessionStorage.setItem("safetrip_vouchers", JSON.stringify(updated));
     } catch { /* silent */ }
   };
 
   const awardLoyaltyPoints = (points: number) => {
     try {
-      const current = parseInt(localStorage.getItem("safetrip_loyalty_points") || "0", 10);
-      localStorage.setItem("safetrip_loyalty_points", String(current + points));
+      const current = parseInt(sessionStorage.getItem("safetrip_loyalty_points") || "0", 10);
+      sessionStorage.setItem("safetrip_loyalty_points", String(current + points));
     } catch { /* silent */ }
   };
 
@@ -270,11 +278,10 @@ export default function ConfirmerReservation() {
     }
 
     setIsProcessing(true);
-    const clientId = localStorage.getItem("safetrip_user_id");
-    const token = localStorage.getItem("safetrip_token") || "";
-    const name = localStorage.getItem("safetrip_user_name") || clientName || "Jean Client";
+    const clientId = user?.id || null;
+    const name = user?.fullName || clientName || "Jean Client";
     const phone = phoneNumber || clientPhone;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
 
     // Handle Card payment directly (Mock)
     if (paymentMethod === "carte") {
@@ -282,9 +289,9 @@ export default function ConfirmerReservation() {
         const response = await fetch(`${apiBase}/api/client/reserver`, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            "Content-Type": "application/json"
           },
+          credentials: "include",
           body: JSON.stringify({
             journey_id: journey.id,
             client_id: clientId,
@@ -303,6 +310,7 @@ export default function ConfirmerReservation() {
           consumeVoucher();
           awardLoyaltyPoints(Math.floor(finalPrice / 100));
           setTicketId(data.ticketId);
+          if (data.qrToken) setQrToken(data.qrToken);
           showToast("Paiement par carte validé avec succès ! Votre billet a été généré. 🎉");
           setStep(3);
         } else {
@@ -372,9 +380,9 @@ export default function ConfirmerReservation() {
               const reserveRes = await fetch(`${apiBase}/api/client/reserver`, {
                 method: "POST",
                 headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${token}`
+                  "Content-Type": "application/json"
                 },
+                credentials: "include",
                 body: JSON.stringify({
                   journey_id: journey.id,
                   client_id: clientId,
@@ -394,6 +402,7 @@ export default function ConfirmerReservation() {
                 consumeVoucher();
                 awardLoyaltyPoints(Math.floor(finalPrice / 100));
                 setTicketId(reserveData.ticketId);
+                if (reserveData.qrToken) setQrToken(reserveData.qrToken);
                 showToast("Paiement validé avec succès ! Votre billet a été généré. 🎉", true);
                 setStep(3);
               } else {
@@ -431,6 +440,25 @@ export default function ConfirmerReservation() {
       const depCity = journey.depStation.split(" - ")[0]?.trim() || "Départ";
       const arrCity = journey.arrStation.split(" - ")[0]?.trim() || "Arrivée";
       const isVipSeat = seatsList.find((s: { id: string; isVip: boolean }) => s.id === selectedSeat)?.isVip ? "VIP" : "Standard";
+
+      const ticketQrPayload = qrToken
+        ? `STP|v1|${qrToken}`
+        : [
+          `SAFETRIP - BILLET DE VOYAGE`,
+          `Réf: ${ticketId}`,
+          `Agence: ${journey.operator}`,
+          `-------------------------`,
+          `PASSAGER:`,
+          `Nom: ${clientName.toUpperCase()}`,
+          `Tél: ${clientPhone}`,
+          `-------------------------`,
+          `VOYAGE:`,
+          `De: ${depCity}`,
+          `Vers: ${arrCity}`,
+          `Date: ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}`,
+          `Départ: ${journey.depTime}`,
+          `Siège: ${selectedSeat} (${isVipSeat})`
+        ].join('\n');
 
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
       const safetripLogoUrl = `${origin}/images/logo-removebg-preview (2).png`;
@@ -505,7 +533,7 @@ export default function ConfirmerReservation() {
              
              <div style="font-size:9px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Billet Unique</div>
              <div style="background:#ffffff;border:2px solid rgba(11, 107, 65, 0.15);border-radius:16px;padding:8px;box-shadow:0 8px 20px rgba(0,0,0,0.03);margin-bottom:12px;">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${ticketId}&color=071A0E" style="width:115px;height:115px;display:block;" crossOrigin="anonymous" />
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=10&data=${encodeURIComponent(ticketQrPayload)}&color=071A0E" style="width:115px;height:115px;display:block;" crossOrigin="anonymous" />
              </div>
              <div style="font-family:monospace;font-size:11px;font-weight:800;color:#0B6B41;letter-spacing:0.5px;margin-bottom:4px;">${ticketId}</div>
              <div style="font-size:9px;font-weight:700;color:#2d3748;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${clientName.toUpperCase()}</div>
@@ -1066,7 +1094,22 @@ export default function ConfirmerReservation() {
                   </div>
                   <div className={styles.ticketQr}>
                     <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${ticketId}&color=071A0E`} 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=10&data=${encodeURIComponent(qrToken ? `STP|v1|${qrToken}` : [
+                        `SAFETRIP - BILLET DE VOYAGE`,
+                        `Réf: ${ticketId}`,
+                        `Agence: ${journey?.operator || ''}`,
+                        `-------------------------`,
+                        `PASSAGER:`,
+                        `Nom: ${clientName.toUpperCase()}`,
+                        `Tél: ${clientPhone}`,
+                        `-------------------------`,
+                        `VOYAGE:`,
+                        `De: ${journey?.depStation.split(" - ")[0]?.trim() || ''}`,
+                        `Vers: ${journey?.arrStation.split(" - ")[0]?.trim() || "Arrivée"}`,
+                        `Date: ${new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}`,
+                        `Départ: ${journey?.depTime || ''}`,
+                        `Siège: ${selectedSeat}`
+                      ].join('\n'))}&color=071A0E`} 
                       alt="Code QR unique du billet" 
                       className={styles.qrImage}
                       crossOrigin="anonymous"

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Dossier Technique Pédagogique – SafeTrip</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --green:#00673C; --gold:#FCD116; --ink:#0A2F1D; --muted:#6b7280; --border:#e5e7eb; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial,sans-serif;color:#111827;line-height:1.6}
+    .page{max-width:900px;margin:0 auto;padding:36px 20px}
+    header{border-left:8px solid var(--green);padding-left:14px;margin-bottom:16px}
+    h1{margin:0 0 6px 0;font-size:28px;color:var(--ink)}
+    h2{margin:26px 0 10px;font-size:22px;color:var(--ink)}
+    h3{margin:18px 0 8px;font-size:18px;color:#0f172a}
+    p{margin:8px 0}
+    ul{margin:6px 0 10px 20px}
+    li{margin:4px 0}
+    .block{border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:#fff;margin:10px 0}
+    .why{background:#f8fafc;border:1px dashed var(--border)}
+    .chip{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #e2e8f0;background:#f1f5f9;color:#334155;font-size:12px;margin-right:6px}
+    .glossary dt{font-weight:800}
+    .glossary dd{margin:0 0 8px 0;color:#374151}
+    .tip{font-size:14px;color:#374151}
+    code{font-family:ui-monospace, Menlo, Consolas, monospace;background:#f8fafc;border:1px solid #eef2f7;border-radius:6px;padding:1px 6px}
+    .toc{border:1px solid var(--border);padding:10px 12px;border-radius:10px}
+    a{color:var(--green);text-decoration:none}
+    @media print { a[href]:after{content:""} .page{padding:18px} }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Dossier Technique Pédagogique – SafeTrip</h1>
+      <div class="tip">Explications simples, avec « Parce que » et des exemples concrets.</div>
+      <div style="margin-top:10px">
+        <span class="chip">Next.js</span>
+        <span class="chip">TypeScript</span>
+        <span class="chip">CSS Modules</span>
+        <span class="chip">next-intl</span>
+        <span class="chip">jsQR</span>
+        <span class="chip">Express</span>
+        <span class="chip">Supabase (PostgreSQL)</span>
+        <span class="chip">Vercel</span>
+        <span class="chip">GitHub</span>
+      </div>
+    </header>
+
+    <div class="toc">
+      <strong>Sommaire</strong>
+      <ol>
+        <li><a href="#apercu">Aperçu simple</a></li>
+        <li><a href="#frontend">Frontend (côté utilisateur)</a></li>
+        <li><a href="#backend">Backend (serveur)</a></li>
+        <li><a href="#database">Base de données</a></li>
+        <li><a href="#messagerie">Messagerie (chat)</a></li>
+        <li><a href="#qr">Scan QR (caméra)</a></li>
+        <li><a href="#hebergement">Hébergement (Vercel) & déploiement</a></li>
+        <li><a href="#github">Collaboration (GitHub)</a></li>
+        <li><a href="#securite">Sécurité & performances</a></li>
+        <li><a href="#tests">Tests & qualité</a></li>
+        <li><a href="#glossaire">Mini‑glossaire</a></li>
+      </ol>
+    </div>
+
+    <h2 id="apercu">1) Aperçu simple</h2>
+    <div class="block">
+      <p>SafeTrip est un site web pour réserver des voyages, discuter avec une agence et scanner des QR codes de billets/colis.</p>
+      <ul>
+        <li><strong>Ce que voit l’utilisateur</strong>: des pages rapides et jolies (Next.js/React) avec plusieurs langues.</li>
+        <li><strong>Ce qui gère les données</strong>: un serveur (Express) qui parle à une base (PostgreSQL via Supabase).</li>
+        <li><strong>Où c’est hébergé</strong>: Vercel pour le site, Supabase pour la base, un service pour l’API.</li>
+      </ul>
+    </div>
+
+    <h2 id="frontend">2) Frontend (côté utilisateur)</h2>
+
+    <h3>Next.js (framework React)</h3>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: Next.js est un outil pour construire des sites rapides avec React.</p>
+      <p><strong>Pourquoi ce choix ? Parce que…</strong></p>
+      <ul>
+        <li>Le site se charge vite <em>parce que</em> certaines pages sont préparées à l’avance sur le serveur (meilleur SEO et temps d’affichage).</li>
+        <li>Le déploiement est très facile sur Vercel <em>parce que</em> Next.js et Vercel sont faits pour bien travailler ensemble.</li>
+        <li>La navigation est fluide <em>parce que</em> Next découpe le code automatiquement (on ne télécharge que ce qu’il faut).</li>
+      </ul>
+      <p><strong>Alternatives</strong>: Create React App (plus ancien, moins optimisé), Gatsby (très orienté génération statique), Remix (plus technique côté serveur).</p>
+      <p><strong>Exemple concret</strong>: la page d’accueil s’affiche rapidement et Google la comprend bien (meilleur référencement).</p>
+    </div>
+
+    <h3>TypeScript</h3>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: c’est du JavaScript avec des « types » pour éviter des erreurs.</p>
+      <p><strong>Pourquoi ? Parce que…</strong></p>
+      <ul>
+        <li>On repère des fautes plus tôt <em>parce que</em> l’éditeur signale les incompatibilités (ex: additionner un texte et un nombre).</li>
+        <li>Le code est plus clair pour l’équipe <em>parce que</em> chaque variable a une forme attendue.</li>
+      </ul>
+      <p><strong>Alternative</strong>: JavaScript pur (plus simple au début, mais erreurs plus tardives et plus coûteuses).</p>
+      <p><strong>Exemple</strong>: quand on manipule un « billet », TypeScript garantit qu’il contient bien les champs attendus (date, statut…).</p>
+    </div>
+
+    <h3>CSS Modules</h3>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: une manière de styliser chaque composant sans mélanger les styles entre eux.</p>
+      <p><strong>Pourquoi ? Parce que…</strong></p>
+      <ul>
+        <li>Les styles restent propres <em>parce que</em> chaque fichier CSS ne touche qu’un composant.</li>
+        <li>Pas de dépendance lourde au runtime (performant).</li>
+      </ul>
+      <p><strong>Alternatives</strong>: Tailwind (rapide mais plus de classes dans le HTML), Styled‑Components (agréable mais ajoute un runtime).</p>
+      <p><strong>Exemple</strong>: la couleur d’un bouton dans le chat n’affecte pas les autres boutons ailleurs.</p>
+    </div>
+
+    <h3>next-intl (traductions)</h3>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: outil pour afficher le site en plusieurs langues.</p>
+      <p><strong>Pourquoi ? Parce que…</strong></p>
+      <ul>
+        <li>Il s’intègre bien à Next.js (pages préparées côté serveur).</li>
+        <li>On peut ajouter des langues facilement à l’avenir.</li>
+      </ul>
+      <p><strong>Alternative</strong>: i18next/react-intl (très bien aussi, intégration un peu plus manuelle).</p>
+    </div>
+
+    <h3>jsQR + getUserMedia + Canvas (scan QR)</h3>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: on ouvre la caméra (getUserMedia), on lit l’image (Canvas) et jsQR trouve le QR code.</p>
+      <p><strong>Pourquoi ? Parce que…</strong></p>
+      <ul>
+        <li>Tout se passe dans le navigateur <em>parce que</em> c’est plus rapide (pas d’envoi vidéo au serveur).</li>
+        <li>C’est léger et fiable pour nos QR (billets/colis).</li>
+      </ul>
+      <p><strong>Alternative</strong>: ZXing (similaire, parfois plus lourd), service externe (latence et dépendance réseau).</p>
+      <p><strong>Important mobile</strong>: les navigateurs bloquent la caméra si le site n’est pas en HTTPS. Donc en production, on passe par Vercel (HTTPS), <em>parce que</em> c’est une exigence de sécurité du navigateur.</p>
+    </div>
+
+    <h2 id="backend">3) Backend (serveur)</h2>
+
+    <h3>Express (TypeScript)</h3>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: un petit serveur qui reçoit des requêtes (URL) et renvoie des réponses (JSON).</p>
+      <p><strong>Pourquoi ? Parce que…</strong></p>
+      <ul>
+        <li>C’est simple et connu, donc on va vite.</li>
+        <li>On garde le contrôle précis sur chaque route (messages, profils, scan…).</li>
+      </ul>
+      <p><strong>Alternatives</strong>: NestJS (très structuré, plus lourd au début), Fastify (plus rapide mais API différente).</p>
+      <p><strong>Exemple</strong>: quand l’appli demande « donne-moi les messages du fil X », Express lit la base et renvoie la liste.</p>
+    </div>
+
+    <h2 id="database">4) Base de données (Supabase / PostgreSQL)</h2>
+    <div class="block why">
+      <p><strong>Définition simple</strong>: Supabase héberge une base PostgreSQL (tables, lignes, colonnes) pour nous.</p>
+      <p><strong>Pourquoi PostgreSQL via Supabase ? Parce que…</strong></p>
+      <ul>
+        <li>C’est du SQL classique (puissant et standard), donc facile à requêter.</li>
+        <li>Supabase gère l’hébergement, les sauvegardes et la sécurité de base.</li>
+      </ul>
+      <p><strong>Alternatives</strong>: Firebase (NoSQL, très bien mais modèle différent), PlanetScale (MySQL), MongoDB (NoSQL).</p>
+      <p><strong>Exemple</strong>: la table <code>messages</code> contient: texte, heure, auteur, et aussi <code>reply_to_id</code>/<code>reply_to_text</code> pour afficher « Réponse à … ».</p>
+    </div>
+
+    <h2 id="messagerie">5) Messagerie (chat)</h2>
+    <div class="block">
+      <p><strong>Fonctions</strong>: envoyer, modifier, supprimer un message; marquer comme lu; répondre à un message avec aperçu.</p>
+      <p><strong>Comment ça marche simplement</strong>:</p>
+      <ul>
+        <li>Le site demande la liste des messages toutes les 3 secondes (polling) <em>parce que</em> c’est simple et fiable.</li>
+        <li>Quand on répond, on enregistre l’ID et un extrait du message d’origine pour l’afficher dans la bulle.</li>
+      </ul>
+      <p><strong>Pourquoi pas WebSockets pour l’instant ? Parce que…</strong> pour notre charge actuelle, le polling est suffisant et plus rapide à mettre en place. On pourra passer à du temps réel poussé quand nécessaire.</p>
+    </div>
+
+    <h2 id="qr">6) Scan QR (caméra)</h2>
+    <div class="block">
+      <ul>
+        <li>On ouvre la caméra (avec l’autorisation de l’utilisateur) et on analyse l’image en direct.</li>
+        <li><strong>HTTPS obligatoire sur téléphone</strong> <em>parce que</em> les navigateurs protègent l’accès caméra. Vercel fournit HTTPS automatiquement.</li>
+      </ul>
+    </div>
+
+    <h2 id="hebergement">7) Hébergement (Vercel) & déploiement</h2>
+    <div class="block why">
+      <p><strong>Vercel (Frontend)</strong></p>
+      <ul>
+        <li>Déploiement automatique depuis GitHub <em>parce que</em> Vercel se connecte directement au dépôt.</li>
+        <li>Le site est servi depuis des serveurs proches des utilisateurs (CDN) <em>parce que</em> cela réduit le temps de chargement.</li>
+        <li>Les prévisualisations de chaque Pull Request aident à valider avant mise en prod.</li>
+      </ul>
+      <p><strong>Backend</strong>: on choisit un service (Render, Railway, Fly.io) qui lance notre serveur Express. <em>Parce que</em> c’est simple et économique.</p>
+    </div>
+
+    <h2 id="github">8) Collaboration (GitHub)</h2>
+    <div class="block">
+      <ul>
+        <li>On pousse le code sur des branches (ex: <code>feature/chat-reply</code>).</li>
+        <li>On ouvre une Pull Request pour discuter et vérifier.</li>
+        <li>Vercel crée automatiquement un lien de test pour cette PR (préview).</li>
+      </ul>
+      <p><strong>Pourquoi GitHub ? Parce que…</strong> c’est l’outil standard du marché, simple à partager et très bien intégré à Vercel.</p>
+    </div>
+
+    <h2 id="securite">9) Sécurité & performances</h2>
+    <div class="block">
+      <ul>
+        <li><strong>Sécurité</strong>: HTTPS, vérification d’authentification (middleware), validation des données en entrée.</li>
+        <li><strong>Performances</strong>: Next.js prépare les pages côté serveur; images optimisées; code découpé.</li>
+        <li><strong>Observabilité</strong>: logs serveur; on peut ajouter Sentry pour repérer les erreurs en production.</li>
+      </ul>
+    </div>
+
+    <h2 id="tests">10) Tests & qualité</h2>
+    <div class="block">
+      <ul>
+        <li>Tests simples pour s’assurer que les routes essentielles répondent bien.</li>
+        <li>Tests de scénario (E2E) envisagés pour la messagerie et le scan.</li>
+        <li>Formatage/Lint pour garder un code propre et homogène.</li>
+      </ul>
+    </div>
+
+    <h2 id="glossaire">11) Mini‑glossaire (mots clés)</h2>
+    <dl class="glossary">
+      <dt>Framework</dt>
+      <dd>Boîte à outils qui accélère le développement (ex: Next.js pour React).</dd>
+      <dt>API</dt>
+      <dd>Porte d’entrée pour discuter avec le serveur (ex: /api/agency/messages).</dd>
+      <dt>Base de données</dt>
+      <dd>Endroit où l’on enregistre les informations (ex: messages, billets, colis).</dd>
+      <dt>HTTPS</dt>
+      <dd>Connexion sécurisée (obligatoire pour la caméra sur mobile).</dd>
+      <dt>CDN</dt>
+      <dd>Réseau de serveurs proches des utilisateurs pour charger plus vite.</dd>
+    </dl>
+  </div>
+</body>
+</html>

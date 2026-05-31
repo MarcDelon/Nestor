@@ -1,0 +1,127 @@
+{\rtf1\ansi\deff0
+{\b Dossier Technique – SafeTrip}\par
+\par
+{\b 1) Aperçu du projet}\par
+- Application web de réservation, suivi, messagerie et scan QR pour agences et voyageurs.\par
+- Frontend en Next.js/React (TypeScript), backend Node/Express (TypeScript), base Supabase (PostgreSQL).\par
+- Hébergement prévu: Vercel (frontend). Collaboration: GitHub.\par
+\par
+{\b 2) Frontend}\par
+{\b • Next.js (React + App Router)}\par
+Définition: Framework React full‑stack avec rendu hybride (SSR/SSG), routage, optimisations.\par
+Pourquoi:\par
+- SEO, performances et mise en cache supérieures vs Create React App.\par
+- Facilité de déploiement sur Vercel (intégration native).\par
+- Alternative: Gatsby (orienté SSG), CRA (obsolète), Remix (plus server‑centric).\par
+\par
+{\b • TypeScript}\par
+Définition: Surcouche typée de JavaScript.\par
+Pourquoi:\par
+- Réduction des bugs, DX améliorée, refactoring sûr.\par
+- Alternative: JavaScript pur (moins de sûreté), Flow (peu adopté).\par
+\par
+{\b • CSS Modules}\par
+Définition: Portée locale des styles via fichiers .module.css.\par
+Pourquoi:\par
+- Isolation des styles, zéro runtime, simple à maintenir.\par
+- Alternative: Tailwind CSS (rapide mais utilitaires en markup), Styled‑Components/Emotion (runtime CSS‑in‑JS).\par
+\par
+{\b • Internationalisation: next-intl}\par
+Définition: Librairie i18n pour Next.js.\par
+Pourquoi:\par
+- API simple, SSR‑friendly, intégration App Router.\par
+- Alternative: i18next/react-intl (très bien, mais intégration Next moins directe).\par
+\par
+{\b • QR Scanning: jsQR + Web APIs (getUserMedia, Canvas)}\par
+Définition: jsQR décode un QR depuis une image; getUserMedia ouvre la caméra; Canvas capture les frames.\par
+Pourquoi:\par
+- Léger, sans dépendances natives; fonctionne dans le navigateur.\par
+- Alternative: ZXing (plus lourd), backends de vision (latence réseau).\par
+\par
+{\b • Fetch API + Polling}\par
+Définition: Récupération HTTP périodique (chat/messages).\par
+Pourquoi:\par
+- Implémentation simple et robuste; pas de serveur temps‑réel à maintenir.\par
+- Alternative: WebSockets/Socket.IO (temps réel, plus complexe).\par
+\par
+{\b 3) Backend}\par
+{\b • Node.js + Express (TypeScript)}\par
+Définition: Runtime JS côté serveur + micro‑framework HTTP.\par
+Pourquoi:\par
+- Légèreté, écosystème mature, contrôle fin des routes/middlewares.\par
+- Alternative: NestJS (structure opinionée), Fastify (plus rapide, mais moins classique).\par
+\par
+{\b • Supabase (PostgreSQL managé)}\par
+Définition: BaaS open‑source (auth, stockage, Postgres, RPC).\par
+Pourquoi:\par
+- PostgreSQL robuste, requêtes SQL directes, hébergement managé.\par
+- Alternative: Firebase (NoSQL, règles différentes), PlanetScale (MySQL), MongoDB Atlas (NoSQL).\par
+\par
+{\b • Auth & Sécurité}\par
+- Middleware requireAuth, cookies/headers; endpoints REST typés.\par
+- Meilleures pratiques: validation d’entrée, CORS, HTTPS en production.\par
+\par
+{\b 4) Outils de développement}\par
+- ts-node pour scripts (création des tables, seed).\par
+- ESLint/Prettier (recommandés; si activés, assurent style et qualité).\par
+- DevTools navigateurs, React DevTools.\par
+\par
+{\b 5) Messagerie (chat)}\par
+- Modèle messages: {id, agency_id, thread_id, sender, text, time, is_read, reply_to_id, reply_to_text}.\par
+- Fonctions: envoi, lecture, marquage comme lu, édition, suppression, réponse avec aperçu.\par
+- Choix: REST + polling pour simplicité; alternative: WebSockets pour temps réel fort.\par
+\par
+{\b 6) Scan QR & Traçabilité}\par
+- getUserMedia + Canvas + jsQR pour lecture locale; rendu UI responsive, indicateurs visuels.\par
+- Remarque sécurité: caméras requièrent HTTPS ou localhost sur mobile.\par
+\par
+{\b 7) Hébergement & CI/CD}\par
+{\b • Vercel (frontend)}\par
+Pourquoi:\par
+- Déploiement instantané depuis GitHub (préviews par PR), CDN mondial, images/SSR optimisés.\par
+- Alternative: Netlify (excellente aussi), mais Next a une intégration première classe sur Vercel.\par
+\par
+{\b • Backend}\par
+- DB Supabase managée (PostgreSQL).\par
+- Service Express: options courantes Render, Railway, Fly.io (choix selon coûts/latences).\par
+- Alternative: Serverless Functions (Vercel/Cloudflare) après adaptation, ou Supabase Edge Functions.\par
+\par
+{\b 8) Collaboration & Workflow}\par
+{\b • GitHub}\par
+Pourquoi:\par
+- Héberge le code, PRs, code‑review, Issues, Projects. Intégration directe avec Vercel.\par
+- Alternative: GitLab/Bitbucket (équivalents mais intégrations Vercel différentes).\par
+\par
+{\b • Branching}\par
+- main (stable), feature/* (développement), hotfix/* (correctifs).\par
+\par
+{\b • Revues & Qualité}\par
+- PRs avec checks automatiques (build, tests), conventions de commits (optionnel).\par
+\par
+{\b 9) Choix techniques – synthèse vs alternatives}\par
+- Next.js + TypeScript: productivité + qualité vs CRA/JS.\par
+- Supabase/PostgreSQL: SQL, relations, coûts contenus vs Firebase NoSQL.\par
+- Express: minimal et connu vs NestJS plus structuré.\par
+- CSS Modules: simplicité, zéro runtime vs CSS‑in‑JS/Tailwind (préférence d’équipe).\par
+- Vercel: DX et perfs pour Next vs Netlify (proche), ou autoscaling maison (plus d’efforts).\par
+- GitHub: standard industriel, PRs, intégration Vercel.\par
+\par
+{\b 10) Opérations & bonnes pratiques}\par
+- Env vars sécurisées (Vercel + Supabase).\par
+- Observabilité: logs serveur, Sentry/Logtail (recommandés).\par
+- Backups DB Supabase planifiés.\par
+- Tests E2E (Playwright) recommandés pour flux critiques (scan, paiement, chat).\par
+\par
+{\b 11) Guide déploiement rapide}\par
+1. Connecter le repo GitHub à Vercel; sélectionner le dossier frontend comme projet.\par
+2. Configurer NEXT_PUBLIC_API_URL, SUPABASE_URL, SUPABASE_KEY (frontend si nécessaire).\par
+3. Backend: déployer l’API Express (Render/Railway) et renseigner l’URL dans NEXT_PUBLIC_API_URL.\par
+4. Supabase: exécuter migrations (schema.sql + migrations/*).\par
+5. Vérifier i18n, routes, et tests de base (messagerie, scan).\par
+\par
+{\b 12) Licence & conformité}\par
+- Dépendances open‑source; respecter licences (MIT/Apache/etc.).\par
+- Données personnelles: cookies, RGPD (bannières/mentions si production publique).\par
+\par
+{\b Fin.}\par
+}

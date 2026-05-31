@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Webographie du Projet SafeTrip</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0b7e8c;
+      --secondary: #0f172a;
+      --muted: #475569;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      line-height: 1.6;
+      background: #fff;
+    }
+    .container {
+      max-width: 920px;
+      margin: 40px auto;
+      padding: 0 24px 60px;
+    }
+    header {
+      border-bottom: 3px solid var(--primary);
+      padding-bottom: 16px;
+      margin-bottom: 28px;
+    }
+    h1 {
+      font-family: 'Montserrat', Arial, sans-serif;
+      font-weight: 700;
+      font-size: 32px;
+      margin: 0 0 6px;
+      color: var(--secondary);
+      letter-spacing: 0.2px;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin: 0 0 6px;
+    }
+    .meta {
+      font-size: 12px;
+      color: #64748b;
+    }
+    h2 {
+      font-family: 'Montserrat', Arial, sans-serif;
+      font-weight: 600;
+      font-size: 22px;
+      margin: 28px 0 12px;
+      color: var(--secondary);
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    h3 {
+      font-weight: 600;
+      font-size: 18px;
+      margin: 18px 0 6px;
+      color: var(--secondary);
+    }
+    p { margin: 6px 0 10px; }
+    ul { margin: 8px 0 14px 20px; }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .item { padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; margin: 12px 0; }
+    .tag { display: inline-block; font-size: 12px; color: #0b5; background: #ecfdf5; border: 1px solid #d1fae5; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: middle; }
+    .version { font-size: 12px; color: #475569; margin-left: 8px; }
+    @media print {
+      .container { margin: 0; max-width: 100%; padding: 0 24px; }
+      header { margin-top: 8px; }
+      a { color: #000; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Webographie du Projet SafeTrip</h1>
+      <p class="subtitle">Marketplace de transport routier et de suivi de colis – ressources techniques et documentations</p>
+      <p class="meta">Généré le: <script>document.write(new Date().toLocaleDateString('fr-FR'));</script></p>
+    </header>
+
+    <section>
+      <h2>1. Technologies Fondamentales & Frameworks</h2>
+
+      <div class="item">
+        <h3>React <span class="version">(v19.0)</span></h3>
+        <p>Description : Bibliothèque JavaScript de référence pour la création d'interfaces utilisateur réactives et modulaires.</p>
+        <p>Lien : <a href="https://react.dev/" target="_blank" rel="noreferrer">https://react.dev/</a></p>
+      </div>
+
+      <div class="item">
+        <h3>Next.js <span class="version">(v16.2 - Turbopack)</span></h3>
+        <p>Description : Framework React de production avec routage basé sur les dossiers (App Router), rendu côté serveur (SSR), génération de pages statiques (SSG) et compilation ultra-rapide Turbopack.</p>
+        <p>Lien : <a href="https://nextjs.org/docs" target="_blank" rel="noreferrer">https://nextjs.org/docs</a></p>
+      </div>
+
+      <div class="item">
+        <h3>Node.js &amp; Express</h3>
+        <p>Description : Environnement d'exécution JavaScript côté serveur et micro-framework minimaliste pour le développement d'APIs REST modulaires et performantes.</p>
+        <p>Liens :
+          <br />- <a href="https://nodejs.org/" target="_blank" rel="noreferrer">https://nodejs.org/</a>
+          <br />- <a href="https://expressjs.com/" target="_blank" rel="noreferrer">https://expressjs.com/</a>
+        </p>
+      </div>
+
+      <div class="item">
+        <h3>TypeScript <span class="version">(v5.0)</span></h3>
+        <p>Description : Sur-ensemble typé de JavaScript garantissant la robustesse du code, l'auto-complétion intelligente et la sécurité des types à la compilation sur le frontend et le backend.</p>
+        <p>Lien : <a href="https://www.typescriptlang.org/docs/" target="_blank" rel="noreferrer">https://www.typescriptlang.org/docs/</a></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Base de Données &amp; Services Backend (BaaS)</h2>
+
+      <div class="item">
+        <h3>Supabase &amp; PostgreSQL</h3>
+        <p>Description : Plateforme Backend-as-a-Service (BaaS) open-source basée sur PostgreSQL. Utilisée pour l'hébergement de la base de données relationnelle, l'authentification sécurisée, la gestion des sessions, et le requêtage asynchrone via le client unifié.</p>
+        <p>Lien : <a href="https://supabase.com/docs" target="_blank" rel="noreferrer">https://supabase.com/docs</a></p>
+      </div>
+
+      <div class="item">
+        <h3>PostgreSQL Schema &amp; RLS (Row Level Security)</h3>
+        <p>Description : Documentation sur les meilleures pratiques de conception de schémas relationnels SQL et de sécurisation fine des données via les politiques RLS.</p>
+        <p>Lien : <a href="https://www.postgresql.org/docs/" target="_blank" rel="noreferrer">https://www.postgresql.org/docs/</a></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Génération &amp; Lecture de Codes QR (Système de Traçabilité)</h2>
+
+      <div class="item">
+        <h3>API QR Code Generator (goqr.me)</h3>
+        <p>Description : Service cloud gratuit de génération instantanée de codes QR. Utilisé pour créer dynamiquement les codes QR uniques des billets voyageurs et des étiquettes de colis à partir de données sérialisées en temps réel.</p>
+        <p>Lien : <a href="https://goqr.me/api/" target="_blank" rel="noreferrer">https://goqr.me/api/</a></p>
+      </div>
+
+      <div class="item">
+        <h3>jsQR <span class="version">(v1.4)</span></h3>
+        <p>Description : Bibliothèque JavaScript d'analyse d'images pure permettant de détecter et de décoder en temps réel les codes QR à partir de flux vidéo de caméras (webcam). Utilisée pour la simulation du scanner en gare dans le tableau de bord de l'agence.</p>
+        <p>Lien : <a href="https://github.com/cozmo/jsQR" target="_blank" rel="noreferrer">https://github.com/cozmo/jsQR</a></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Génération de Documents PDF &amp; Rendu Graphique</h2>
+
+      <div class="item">
+        <h3>jsPDF <span class="version">(v4.2)</span></h3>
+        <p>Description : Bibliothèque JavaScript côté client pour la génération de documents PDF à partir de scripts. Utilisée pour éditer et télécharger les billets de voyage et les étiquettes de bagages officiels de l'agence.</p>
+        <p>Lien : <a href="https://rawgit.com/MrRio/jsPDF/master/docs/index.html" target="_blank" rel="noreferrer">https://rawgit.com/MrRio/jsPDF/master/docs/index.html</a></p>
+      </div>
+
+      <div class="item">
+        <h3>html2canvas <span class="version">(v1.4)</span></h3>
+        <p>Description : Bibliothèque de capture d'écran d'éléments DOM HTML. Elle convertit le rendu HTML d'un ticket en une image matricielle de haute précision, qui est ensuite vectorisée dans le document PDF via jsPDF.</p>
+        <p>Lien : <a href="https://html2canvas.hertzen.com/" target="_blank" rel="noreferrer">https://html2canvas.hertzen.com/</a></p>
+      </div>
+    </section>
+
+    <section>
+      <h2>5. Intégrations Tierces &amp; Utilitaires</h2>
+
+      <div class="item">
+        <h3>Nodemailer &amp; SMTP Transport</h3>
+        <p>Description : Module d'envoi d'e-mails pour Node.js. Utilisé dans le backend pour alerter automatiquement et instantanément l'expéditeur et le destinataire par e-mail lors de la livraison d'un colis ou courrier en gare.</p>
+        <p>Lien : <a href="https://nodemailer.com/" target="_blank" rel="noreferrer">https://nodemailer.com/</a></p>
+      </div>
+
+      <div class="item">
+        <h3>Google Fonts <span class="version">(Montserrat, DM Sans, Syne)</span></h3>
+        <p>Description : Répertoire de polices typographiques modernes et optimisées pour le web, structurant l'identité visuelle haut de gamme et harmonieuse de SafeTrip.</p>
+        <p>Lien : <a href="https://fonts.google.com/" target="_blank" rel="noreferrer">https://fonts.google.com/</a></p>
+      </div>
+
+      <div class="item">
+        <h3>Smartsupp Integration</h3>
+        <p>Description : Service de chat en ligne pour interagir en temps réel avec les clients et stocker les sessions de demandes spéciales dans l'historique de l'administration.</p>
+        <p>Lien : <a href="https://www.smartsupp.com/" target="_blank" rel="noreferrer">https://www.smartsupp.com/</a></p>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

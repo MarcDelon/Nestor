@@ -123,6 +123,10 @@ const sqlStatements: string[] = [
     status passenger_status NOT NULL DEFAULT 'Payé',
     luggage_count INTEGER NOT NULL DEFAULT 0,
     luggage_scanned BOOLEAN NOT NULL DEFAULT false,
+    ticket_qr_token TEXT UNIQUE,
+    ticket_scanned BOOLEAN NOT NULL DEFAULT false,
+    ticket_scanned_at TIMESTAMP WITH TIME ZONE,
+    loyalty_points INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
   );`,
   `ALTER TABLE passengers DISABLE ROW LEVEL SECURITY;`,
@@ -157,10 +161,51 @@ const sqlStatements: string[] = [
     sender TEXT NOT NULL CHECK (sender IN ('agency', 'contact')),
     text TEXT NOT NULL,
     time TEXT NOT NULL,
+    reply_to_id INTEGER,
+    reply_to_text TEXT,
     is_read BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
   );`,
   `ALTER TABLE messages DISABLE ROW LEVEL SECURITY;`
+  ,
+  // Table: vouchers (admin-created discount codes, assignable to clients)
+  `CREATE TABLE IF NOT EXISTS vouchers (
+    id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    percentage INTEGER NOT NULL CHECK (percentage > 0 AND percentage <= 100),
+    max_uses INTEGER NOT NULL DEFAULT 100,
+    current_uses INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    assigned_to UUID REFERENCES clients(id) ON DELETE SET NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  );`,
+  `ALTER TABLE vouchers DISABLE ROW LEVEL SECURITY;`
+  ,
+  // Table: loyalty_points (per-client points balance)
+  `CREATE TABLE IF NOT EXISTS loyalty_points (
+    client_id UUID PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+    points INTEGER NOT NULL DEFAULT 0,
+    total_earned INTEGER NOT NULL DEFAULT 0,
+    tier TEXT NOT NULL DEFAULT 'Bronze' CHECK (tier IN ('Bronze', 'Silver', 'Gold')),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  );`,
+  `ALTER TABLE loyalty_points DISABLE ROW LEVEL SECURITY;`
+  ,
+  // Table: notifications (real-time alert feed for clients and agencies)
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+    agency_id INTEGER REFERENCES agencies(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    data JSONB,
+    read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  );`,
+  `ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;`
 ];
 
 async function executeSQL(sql: string, label: string) {

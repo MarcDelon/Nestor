@@ -1,0 +1,2 @@
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_text TEXT;

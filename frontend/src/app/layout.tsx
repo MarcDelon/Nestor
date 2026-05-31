@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Montserrat, DM_Sans, Syne } from "next/font/google";
 import "./globals.css";
 import SmartsuppChat from "@/components/SmartsuppChat";
+import { LanguageProvider } from "@/components/LanguageProvider";
+import { UserProvider } from "@/components/UserContext";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -27,6 +29,10 @@ const syne = Syne({
 export const metadata: Metadata = {
   title: "SafeTrip | Votre Marketplace de Voyage Routier",
   description: "Réservez vos billets de bus et tracez vos colis en toute sécurité avec SafeTrip.",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/favicon.png",
+  },
 };
 
 export default function RootLayout({
@@ -35,10 +41,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" data-scroll-behavior="smooth">
       <body className={`${dmSans.variable} ${syne.variable} ${montserrat.variable}`}>
-        {children}
-        <SmartsuppChat />
+        <UserProvider>
+          <LanguageProvider>
+            {children}
+            <SmartsuppChat />
+          </LanguageProvider>
+        </UserProvider>
       </body>
     </html>
   );

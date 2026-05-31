@@ -4,8 +4,11 @@ import styles from "./page.module.css";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useUser } from "@/components/UserContext";
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/agency`;
+const API_BASE = `${(typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'))}/api/agency`;
 
 interface DBError extends Error {
   message: string;
@@ -51,6 +54,9 @@ interface Voucher {
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const { user, loading: userLoading, logout: contextLogout } = useUser();
+  const t = useTranslations("AdminDashboard");
+  const tc = useTranslations("Common");
   const [email, setEmail] = useState("");
   const [isMounted, setIsMounted] = useState(false);
   const [adminActiveTab, setAdminActiveTab] = useState("dashboard");
@@ -69,28 +75,26 @@ export default function AdminDashboard() {
   const [newVoucherMaxUses, setNewVoucherMaxUses] = useState("100");
   const [voucherFormError, setVoucherFormError] = useState("");
 
+  // Redirect if not logged in
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    const role = localStorage.getItem("safetrip_user_role");
-    
-    if (!isLoggedIn || role !== "admin") {
+    if (!userLoading && (!user || user.role !== "admin")) {
       router.push("/login");
-      return;
     }
+  }, [user, userLoading]);
 
-    const storedEmail = localStorage.getItem("safetrip_user_email") || "";
-    setEmail(storedEmail);
+  useEffect(() => {
+    if (!user) return;
+
+    setEmail(user.email);
 
     const fetchData = async () => {
-      const token = localStorage.getItem("safetrip_token") || "";
       const authHeaders = {
-        "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       };
 
       try {
         // 1. Fetch Agencies
-        const agenciesRes = await fetch(`${API_BASE}/agencies`, { headers: authHeaders });
+        const agenciesRes = await fetch(`${API_BASE}/agencies`, { headers: authHeaders, credentials: "include" });
         let agenciesData: Agency[] = [];
         if (agenciesRes.ok) {
           agenciesData = await agenciesRes.json();
@@ -98,7 +102,7 @@ export default function AdminDashboard() {
         }
 
         // 2. Fetch Buses
-        const busesRes = await fetch(`${API_BASE}/buses`, { headers: authHeaders });
+        const busesRes = await fetch(`${API_BASE}/buses`, { headers: authHeaders, credentials: "include" });
         let busesData: Bus[] = [];
         if (busesRes.ok) {
           busesData = await busesRes.json();
@@ -106,7 +110,7 @@ export default function AdminDashboard() {
         }
 
         // 3. Fetch Journeys
-        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers: authHeaders });
+        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers: authHeaders, credentials: "include" });
         let journeysData: Journey[] = [];
         if (journeysRes.ok) {
           const raw = await journeysRes.json();
@@ -120,9 +124,9 @@ export default function AdminDashboard() {
           await Promise.all(
             journeysData.map(async (j) => {
               try {
-                const pRes = await fetch(`${API_BASE}/passengers/${j.id}`, { headers: authHeaders });
+                const pRes = await fetch(`${API_BASE}/passengers/${j.id}`, { headers: authHeaders, credentials: "include" });
                 if (pRes.ok) {
-                  tempMap[j.id] = await pRes.json();
+                   tempMap[j.id] = await pRes.json();
                 }
               } catch (e) {
                 console.error("Error fetching passengers for journey " + j.id, e);
@@ -142,25 +146,20 @@ export default function AdminDashboard() {
 
     fetchData();
 
-    // Load vouchers from localStorage
+    // Load vouchers from sessionStorage
     try {
-      const stored = JSON.parse(localStorage.getItem("safetrip_vouchers") || "[]");
+      const stored = JSON.parse(sessionStorage.getItem("safetrip_vouchers") || "[]");
       setVouchers(stored);
     } catch { setVouchers([]); }
-  }, [router]);
+  }, [user]);
 
   const handleLogout = () => {
-    localStorage.setItem("safetrip_logged_in", "false");
-    localStorage.removeItem("safetrip_user_role");
-    localStorage.removeItem("safetrip_token");
-    localStorage.removeItem("safetrip_user_email");
-    localStorage.removeItem("safetrip_user_name");
-    router.push("/login");
+    contextLogout();
   };
 
   const saveVouchers = (updated: Voucher[]) => {
     setVouchers(updated);
-    localStorage.setItem("safetrip_vouchers", JSON.stringify(updated));
+    sessionStorage.setItem("safetrip_vouchers", JSON.stringify(updated));
   };
 
   const handleCreateVoucher = (e: React.FormEvent) => {
@@ -168,21 +167,21 @@ export default function AdminDashboard() {
     setVoucherFormError("");
     const code = newVoucherCode.trim().toUpperCase();
     if (!code || code.length < 3) {
-      setVoucherFormError("Le code doit contenir au moins 3 caractères.");
+      setVoucherFormError(t("errCodeTooShort"));
       return;
     }
     if (vouchers.some(v => v.code === code)) {
-      setVoucherFormError("Ce code existe déjà.");
+      setVoucherFormError(t("errCodeExists"));
       return;
     }
     const pct = parseInt(newVoucherPct, 10);
     if (isNaN(pct) || pct <= 0 || pct > 100) {
-      setVoucherFormError("Le pourcentage doit être entre 1 et 100.");
+      setVoucherFormError(t("errPctRange"));
       return;
     }
     const maxUses = parseInt(newVoucherMaxUses, 10);
     if (isNaN(maxUses) || maxUses <= 0) {
-      setVoucherFormError("Le nombre d'utilisations doit être supérieur à 0.");
+      setVoucherFormError(t("errMaxUsages"));
       return;
     }
     const newVoucher: Voucher = {
@@ -251,7 +250,7 @@ export default function AdminDashboard() {
             }
           `}</style>
           <h3 style={{ color: "#1a202c", margin: "0 0 6px 0", fontSize: "1.1rem", fontWeight: 700 }}>SafeTrip</h3>
-          <p style={{ color: "#718096", fontSize: "0.85rem", margin: 0, fontWeight: 500 }}>Chargement de l&apos;administration...</p>
+          <p style={{ color: "#718096", fontSize: "0.85rem", margin: 0, fontWeight: 500 }}>{t("loading")}</p>
         </div>
       </div>
     );
@@ -276,6 +275,22 @@ export default function AdminDashboard() {
   const qrCompliance = totalPassengers > 0
     ? (totalCheckedIn / totalPassengers) * 100
     : 100.0;
+
+  if (userLoading || !user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f4f7f5', color: '#00673C', fontSize: '1.2rem', fontWeight: 'bold' }}>
+        Chargement de la Console Administration... 🚌
+      </div>
+    );
+  }
+
+  if (userLoading || !user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f4f7f5', color: '#00673C', fontSize: '1.2rem', fontWeight: 'bold' }}>
+        Chargement de la Console Administration... 🚌
+      </div>
+    );
+  }
 
   return (
     <div className={styles.clientDashboardLayout}>
@@ -307,7 +322,7 @@ export default function AdminDashboard() {
               <rect x="14" y="12" width="7" height="9" rx="1" />
               <rect x="3" y="16" width="7" height="5" rx="1" />
             </svg>
-            Console Admin
+            {t("adminConsole")}
           </button>
           <button
             type="button"
@@ -321,7 +336,7 @@ export default function AdminDashboard() {
               <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
               <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
             </svg>
-            Bons de Réduction
+            {t("vouchers")}
           </button>
         </nav>
 
@@ -331,7 +346,7 @@ export default function AdminDashboard() {
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
               <polyline points="9 22 9 12 15 12 15 22" />
             </svg>
-            Retour au site
+            {tc("backToSite")}
           </Link>
 
           <button type="button" onClick={handleLogout} className={styles.sidebarLogoutBtn}>
@@ -340,7 +355,7 @@ export default function AdminDashboard() {
               <polyline points="16 17 21 12 16 7" />
               <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
-            Déconnexion
+            {tc("logout")}
           </button>
         </div>
       </aside>
@@ -360,12 +375,13 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div className={styles.agencyText}>
-                <h1 style={{ fontSize: "1.4rem", fontWeight: 900, color: "#ffffff" }}>Console Administration</h1>
-                <span className={styles.agencyBadge}>Super Admin SafeTrip</span>
+                <h1 style={{ fontSize: "1.4rem", fontWeight: 900, color: "#ffffff" }}>{t("adminConsole")}</h1>
+                <span className={styles.agencyBadge}>{t("superAdmin")}</span>
               </div>
             </div>
             <div className={styles.bannerControls}>
-              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>Compte Admin : {email}</span>
+              <LanguageToggle />
+              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>{t("adminAccount")} {email}</span>
             </div>
           </div>
 
@@ -379,9 +395,9 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Chiffre d&apos;Affaires Global</span>
+                <span className={styles.statLabel}>{t("globalRevenue")}</span>
                 <span className={styles.statValue}>{totalSales.toLocaleString()} FCFA</span>
-                <span className={styles.statTrend} style={{ color: "#2f855a" }}>● {totalPassengers} billet{totalPassengers !== 1 ? "s" : ""} vendu{totalPassengers !== 1 ? "s" : ""}</span>
+                <span className={styles.statTrend} style={{ color: "#2f855a" }}>● {totalPassengers} {t("ticketsSold")}</span>
               </div>
             </div>
 
@@ -395,9 +411,9 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Agences Partenaires</span>
-                <span className={styles.statValue}>{agencies.length} Compagnies</span>
-                <span className={styles.statTrend} style={{ color: "#718096" }}>Toutes certifiées SafeTrip</span>
+                <span className={styles.statLabel}>{t("partnerAgencies")}</span>
+                <span className={styles.statValue}>{agencies.length} {t("companies")}</span>
+                <span className={styles.statTrend} style={{ color: "#718096" }}>{t("allCertified")}</span>
               </div>
             </div>
 
@@ -408,9 +424,9 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Trajets Actifs</span>
-                <span className={styles.statValue}>{journeys.length} Horaires</span>
-                <span className={styles.statTrend} style={{ color: "#3182ce" }}>Lignes Nationales</span>
+                <span className={styles.statLabel}>{t("activeTrips")}</span>
+                <span className={styles.statValue}>{journeys.length} {t("schedules")}</span>
+                <span className={styles.statTrend} style={{ color: "#3182ce" }}>{t("nationalLines")}</span>
               </div>
             </div>
 
@@ -422,9 +438,9 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Enregistrements QR</span>
+                <span className={styles.statLabel}>{t("qrRegistrations")}</span>
                 <span className={styles.statValue}>{qrCompliance.toFixed(1)}%</span>
-                <span className={styles.statTrend} style={{ color: "#2f855a" }}>Conformité optimale 🇨🇲</span>
+                <span className={styles.statTrend} style={{ color: "#2f855a" }}>{t("optimalCompliance")} 🇨🇲</span>
               </div>
             </div>
           </div>
@@ -432,18 +448,18 @@ export default function AdminDashboard() {
           {/* Table Card */}
           <div className={styles.panelCard} style={{ marginTop: "30px" }}>
             <div className={styles.panelHeader} style={{ background: "rgba(0,103,60,0.02)" }}>
-              <h2 className={styles.panelTitle}>Compagnies de Transport Nationales Agréées</h2>
+              <h2 className={styles.panelTitle}>{t("approvedCompanies")}</h2>
             </div>
             <div className={styles.panelBody} style={{ padding: "0" }}>
               <div className={styles.rosterTableContainer} style={{ border: "none", borderRadius: "0" }}>
                 <table className={styles.rosterTable}>
                   <thead>
                     <tr>
-                      <th>Compagnie</th>
-                      <th>Certificat</th>
-                      <th>Bus Actifs</th>
-                      <th>Taux de Remplissage</th>
-                      <th>Statut Ligne</th>
+                      <th>{t("colCompany")}</th>
+                      <th>{t("colCertificate")}</th>
+                      <th>{t("colActiveBuses")}</th>
+                      <th>{t("colOccupancy")}</th>
+                      <th>{t("colLineStatus")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -478,14 +494,14 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td>
-                            <strong>{activeBusesCount} / {agencyBuses.length} bus actifs</strong>
+                            <strong>{activeBusesCount} / {agencyBuses.length} {t("activeBuses")}</strong>
                           </td>
                           <td>
                             <strong>{occupancyRate}%</strong>
                           </td>
                           <td>
                             <span className={`${styles.statusPill} ${hasJourneys ? styles.statusChecked : styles.statusPending}`}>
-                              {hasJourneys ? "Actif" : "Inactif"}
+                              {hasJourneys ? t("active") : t("inactive")}
                             </span>
                           </td>
                         </tr>
@@ -515,13 +531,14 @@ export default function AdminDashboard() {
                 </svg>
               </div>
               <div className={styles.agencyText}>
-                <h1 style={{ fontSize: "1.4rem", fontWeight: 900, color: "#ffffff" }}>Bons de Réduction</h1>
-                <span className={styles.agencyBadge}>Gestion des codes promo SafeTrip</span>
+                <h1 style={{ fontSize: "1.4rem", fontWeight: 900, color: "#ffffff" }}>{t("vouchers")}</h1>
+                <span className={styles.agencyBadge}>{t("voucherSubtitle")}</span>
               </div>
             </div>
             <div className={styles.bannerControls}>
+              <LanguageToggle />
               <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>
-                {vouchers.filter(v => v.status === "published").length} code{vouchers.filter(v => v.status === "published").length !== 1 ? "s" : ""} actif{vouchers.filter(v => v.status === "published").length !== 1 ? "s" : ""}
+                {vouchers.filter(v => v.status === "published").length} {t("activeCodes")}
               </span>
             </div>
           </div>
@@ -533,9 +550,9 @@ export default function AdminDashboard() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/></svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Total Codes</span>
+                <span className={styles.statLabel}>{t("totalCodes")}</span>
                 <span className={styles.statValue}>{vouchers.length}</span>
-                <span className={styles.statTrend} style={{ color: "#718096" }}>Créés</span>
+                <span className={styles.statTrend} style={{ color: "#718096" }}>{t("created")}</span>
               </div>
             </div>
             <div className={styles.statCard}>
@@ -543,9 +560,9 @@ export default function AdminDashboard() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Publiés</span>
+                <span className={styles.statLabel}>{t("published")}</span>
                 <span className={styles.statValue}>{vouchers.filter(v => v.status === "published").length}</span>
-                <span className={styles.statTrend} style={{ color: "#2f855a" }}>Utilisables</span>
+                <span className={styles.statTrend} style={{ color: "#2f855a" }}>{t("usable")}</span>
               </div>
             </div>
             <div className={styles.statCard}>
@@ -553,9 +570,9 @@ export default function AdminDashboard() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
               </div>
               <div className={styles.statValueContainer}>
-                <span className={styles.statLabel}>Utilisations</span>
+                <span className={styles.statLabel}>{t("usages")}</span>
                 <span className={styles.statValue}>{vouchers.reduce((s, v) => s + v.currentUses, 0)}</span>
-                <span className={styles.statTrend} style={{ color: "#3182ce" }}>Total réductions</span>
+                <span className={styles.statTrend} style={{ color: "#3182ce" }}>{t("totalDiscounts")}</span>
               </div>
             </div>
           </div>
@@ -566,13 +583,13 @@ export default function AdminDashboard() {
               <div className={styles.panelHeader}>
                 <h2 className={styles.panelTitle}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 18, height: 18 }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Créer un bon
+                  {t("createVoucher")}
                 </h2>
               </div>
               <div className={styles.panelBody}>
                 <form onSubmit={handleCreateVoucher} className={styles.scheduleForm}>
                   <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Code promo *</label>
+                    <label className={styles.formLabel}>{t("promoCode")} *</label>
                     <input
                       className={styles.formInput}
                       type="text"
@@ -583,7 +600,7 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Réduction (%)</label>
+                    <label className={styles.formLabel}>{t("discount")} (%)</label>
                     <input
                       className={styles.formInput}
                       type="number"
@@ -594,7 +611,7 @@ export default function AdminDashboard() {
                     />
                   </div>
                   <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Nb. utilisations max *</label>
+                    <label className={styles.formLabel}>{t("maxUsages")} *</label>
                     <input
                       className={styles.formInput}
                       type="number"
@@ -608,11 +625,11 @@ export default function AdminDashboard() {
                   )}
                   <button type="submit" className={styles.submitFormBtn}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 16, height: 16 }}><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/></svg>
-                    Créer en brouillon
+                    {t("createDraft")}
                   </button>
                 </form>
                 <p style={{ fontSize: "0.75rem", color: "#a0aec0", marginTop: "14px", lineHeight: 1.5 }}>
-                  Les bons créés sont en <strong>brouillon</strong> par défaut. Publiez-les pour les rendre utilisables par les voyageurs.
+                  {t("draftHint")}
                 </p>
               </div>
             </div>
@@ -622,7 +639,7 @@ export default function AdminDashboard() {
               <div className={styles.panelHeader}>
                 <h2 className={styles.panelTitle}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 18, height: 18 }}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-                  Codes existants ({vouchers.length})
+                  {t("existingCodes")} ({vouchers.length})
                 </h2>
               </div>
               <div className={styles.panelBody} style={{ padding: 0 }}>
@@ -631,20 +648,20 @@ export default function AdminDashboard() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: 40, height: 40, margin: "0 auto 12px auto", display: "block", color: "#cbd5e0" }}>
                       <path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/>
                     </svg>
-                    <p>Aucun bon de réduction créé.</p>
-                    <p style={{ fontSize: "0.75rem", marginTop: 4 }}>Créez votre premier code promo dans le formulaire ci-contre.</p>
+                    <p>{t("noVouchers")}</p>
+                    <p style={{ fontSize: "0.75rem", marginTop: 4 }}>{t("noVouchersHint")}</p>
                   </div>
                 ) : (
                   <div className={styles.rosterTableContainer} style={{ border: "none", borderRadius: 0 }}>
                     <table className={styles.rosterTable}>
                       <thead>
                         <tr>
-                          <th>Code</th>
-                          <th>Réduction</th>
-                          <th>Utilisations</th>
-                          <th>Statut</th>
-                          <th>Créé le</th>
-                          <th>Actions</th>
+                          <th>{t("colCode")}</th>
+                          <th>{t("colDiscount")}</th>
+                          <th>{t("colUsages")}</th>
+                          <th>{t("colStatus")}</th>
+                          <th>{t("colCreatedAt")}</th>
+                          <th>{t("colActions")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -672,7 +689,7 @@ export default function AdminDashboard() {
                                   ? { background: "#eef8f3", color: "#276749" }
                                   : { background: "#fffaf0", color: "#744210" }
                               }>
-                                {v.status === "published" ? "Publié" : "Brouillon"}
+                                {v.status === "published" ? t("statusPublished") : t("statusDraft")}
                               </span>
                             </td>
                             <td style={{ color: "#718096", fontSize: "0.78rem" }}>{v.createdAt}</td>
@@ -694,7 +711,7 @@ export default function AdminDashboard() {
                                     transition: "all 0.2s ease"
                                   }}
                                 >
-                                  {v.status === "published" ? "Retirer" : "Publier"}
+                                  {v.status === "published" ? t("btnUnpublish") : t("btnPublish")}
                                 </button>
                                 <button
                                   type="button"

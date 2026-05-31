@@ -4,10 +4,10 @@ import styles from "./page.module.css";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useUser } from "@/components/UserContext";
 
-const API_BASE = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/agency`;
+const API_BASE = `${(typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'))}/api/agency`;
 const getAuthHeaders = () => ({
-  "Authorization": `Bearer ${typeof window !== "undefined" ? localStorage.getItem("safetrip_token") || "" : ""}`,
   "Content-Type": "application/json",
 });
 
@@ -64,6 +64,12 @@ interface Colis {
   agency: string;
   qrRef: string;
   fragile: boolean;
+  senderName?: string | null;
+  senderPhone?: string | null;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  clientName?: string | null;
+  clientPhone?: string | null;
 }
 
 interface ChatMessage {
@@ -94,10 +100,14 @@ const RESERVATION_AMENITIES = [
 
 export default function AgencyDashboard() {
   const router = useRouter();
+  const { user, loading: userLoading, logout: contextLogout } = useUser();
   const [email, setEmail] = useState("");
   const [isMounted, setIsMounted] = useState(false);
   const [selectedAgencyName, setSelectedAgencyName] = useState("Finexs Voyage");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Helper to resolve the active agency ID (must be before first usage)
+  const currentAgencyId = PARTNER_AGENCIES.findIndex(a => a.name === selectedAgencyName) + 1;
 
   // Premium Sidebar Navigation Active Tab
   const [agencyActiveTab, setAgencyActiveTab] = useState("dashboard");
@@ -125,6 +135,17 @@ export default function AgencyDashboard() {
   const [profileDescription, setProfileDescription] = useState("Pionnier du transport VIP interurbain sécurisé au Cameroun. Voyages quotidiens Douala - Yaoundé.");
   const [profileEditing, setProfileEditing] = useState(false);
 
+  // Bus CRUD modal state
+  const [isBusModalOpen, setIsBusModalOpen] = useState(false);
+  const [editingBus, setEditingBus] = useState<Bus | null>(null);
+  const [busFormPlaque, setBusFormPlaque] = useState("");
+  const [busFormClass, setBusFormClass] = useState<"VIP" | "Confort" | "Classique" | "Executive Class">("Classique");
+  const [busFormCapacity, setBusFormCapacity] = useState(50);
+  const [busFormStatus, setBusFormStatus] = useState<"En route" | "En maintenance" | "Disponible">("Disponible");
+  const [busFormAmenities, setBusFormAmenities] = useState<string[]>([]);
+  const [busSearchQuery, setBusSearchQuery] = useState("");
+
+
   // Form States for planning a new trip
   const [depCity, setDepCity] = useState("");
   const [arrCity, setArrCity] = useState("");
@@ -148,42 +169,143 @@ export default function AgencyDashboard() {
   const [scanningPassenger, setScanningPassenger] = useState<Passenger | null>(null);
   const [activeScanJourneyId, setActiveScanJourneyId] = useState<number | null>(null);
 
-  // Security Check & initial DB hydration from API
+  // Colis selection & search states
+  const [selectedColis, setSelectedColis] = useState<Colis | null>(null);
+  const [luggageSearchText, setLuggageSearchText] = useState("");
+  const [courierSearchText, setCourierSearchText] = useState("");
+
+  // QR Scanner section states
+  const [qrInputValue, setQrInputValue] = useState("");
+  const [scanResult, setScanResult] = useState<{
+    type: "billet" | "colis";
+    data: Record<string, string>;
+    rawText: string;
+  } | null>(null);
+  const [scanNotifStatus, setScanNotifStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const qrInputRef = useRef<HTMLInputElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [scanLinePos, setScanLinePos] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number>(0);
+  const scanLineAnimRef = useRef<number>(0);
+
+  // Animate the scan line up and down
   useEffect(() => {
-    const isLoggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    const role = localStorage.getItem("safetrip_user_role");
-    
-    if (!isLoggedIn || role !== "agency") {
-      router.push("/login");
+    if (!cameraOpen) return;
+    let direction = 1;
+    let pos = 0;
+    const animate = () => {
+      pos += direction * 1.2;
+      if (pos >= 100) direction = -1;
+      if (pos <= 0) direction = 1;
+      setScanLinePos(pos);
+      scanLineAnimRef.current = requestAnimationFrame(animate);
+    };
+    scanLineAnimRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(scanLineAnimRef.current);
+  }, [cameraOpen]);
+
+  useEffect(() => {
+    let iv: any;
+    fetchAgencyNotifications();
+    iv = setInterval(fetchAgencyNotifications, 25000);
+    return () => { if (iv) clearInterval(iv); };
+  }, [currentAgencyId]);
+
+  const parseQrText = (text: string) => {
+    // New compact token format: STP|v1|<token>
+    if (text.startsWith('STP|v1|')) {
+      const token = text.split('|')[2] || '';
+      return { type: 'billet' as const, data: { Token: token }, rawText: text };
+    }
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const data: Record<string, string> = {};
+    lines.forEach(line => {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx > -1) {
+        const key = line.slice(0, colonIdx).trim();
+        const val = line.slice(colonIdx + 1).trim();
+        if (key && val) data[key] = val;
+      }
+    });
+    const isTicket = lines[0]?.includes('BILLET DE VOYAGE');
+    const isColis = lines[0]?.includes('BAGAGE') || lines[0]?.includes('COLIS');
+    if (!isTicket && !isColis) return null;
+    return { type: (isTicket ? "billet" : "colis") as "billet" | "colis", data, rawText: text };
+  };
+
+  const openCamera = async () => {
+    setCameraOpen(true);
+    setCameraError(null);
+    setScanResult(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        scanFrames();
+      }
+    } catch (err: any) {
+      setCameraError("Impossible d'accéder à la caméra. Autorisez l'accès dans votre navigateur.");
+    }
+  };
+
+  const closeCamera = () => {
+    cancelAnimationFrame(animFrameRef.current);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setCameraOpen(false);
+    setCameraError(null);
+  };
+
+  const scanFrames = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(scanFrames);
       return;
     }
-
-    const storedEmail = localStorage.getItem("safetrip_user_email") || "";
-    setEmail(storedEmail);
-
-    let currentAgency = localStorage.getItem("safetrip_active_agency");
-    if (!currentAgency && storedEmail) {
-      const lowerEmail = storedEmail.toLowerCase();
-      if (lowerEmail.includes("buca")) {
-        currentAgency = "Buca Voyage";
-      } else if (lowerEmail.includes("general")) {
-        currentAgency = "General Express";
-      } else if (lowerEmail.includes("touristique")) {
-        currentAgency = "Touristique Express";
-      } else if (lowerEmail.includes("men")) {
-        currentAgency = "Men Travel";
-      } else {
-        currentAgency = "Finexs Voyage";
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    import('jsqr').then(({ default: jsQR }) => {
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) {
+        const parsed = parseQrText(code.data);
+        if (parsed) {
+          closeCamera();
+          setScanResult(parsed);
+          setScanNotifStatus("idle");
+          showToast("✅ QR Code détecté et analysé !");
+          return;
+        }
       }
-      localStorage.setItem("safetrip_active_agency", currentAgency);
-    }
+      animFrameRef.current = requestAnimationFrame(scanFrames);
+    });
+  };
 
-    if (currentAgency) {
-      setSelectedAgencyName(currentAgency);
-    } else {
-      setSelectedAgencyName("Finexs Voyage");
-      localStorage.setItem("safetrip_active_agency", "Finexs Voyage");
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!userLoading && (!user || user.role !== "agency")) {
+      router.push("/login");
     }
+  }, [user, userLoading]);
+
+  // Security Check & initial DB hydration from API
+  useEffect(() => {
+    if (userLoading || !user) return;
+
+    setEmail(user.email);
+    setSelectedAgencyName(user.fullName || "Agence SafeTrip");
 
     // Helper to map DB row to frontend Journey interface
     const mapDbJourney = (j: any): Journey => ({
@@ -238,18 +360,23 @@ export default function AgencyDashboard() {
       tripDate: c.trip_date,
       agency: c.agency || "",
       qrRef: c.qr_ref,
-      fragile: c.fragile
+      fragile: c.fragile,
+      senderName: c.sender_name || c.senderName || c.client_name || null,
+      senderPhone: c.sender_phone || c.senderPhone || c.client_phone || null,
+      recipientName: c.receiver_name || c.recipient_name || c.recipientName || c.client_name || null,
+      recipientPhone: c.receiver_phone || c.recipient_phone || c.recipientPhone || c.client_phone || null,
+      clientName: c.client_name || null,
+      clientPhone: c.client_phone || null
     });
 
     // Hydrate ALL data from backend API with localStorage fallback
     const hydrateFromApi = async () => {
-      const storedAgencyIdStr = localStorage.getItem("safetrip_agency_id") || "1";
-      const storedAgencyId = parseInt(storedAgencyIdStr, 10) || 1;
+      const storedAgencyId = user ? (user.agencyId || 1) : 1;
       const headers = getAuthHeaders();
 
       // 1. Fetch ALL journeys (not filtered — we filter client-side)
       try {
-        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers });
+        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers, credentials: "include" });
         if (journeysRes.ok) {
           const rawJourneys = await journeysRes.json();
           const journeysArr = Array.isArray(rawJourneys) ? rawJourneys : (rawJourneys && Array.isArray(rawJourneys.value) ? rawJourneys.value : []);
@@ -263,7 +390,7 @@ export default function AgencyDashboard() {
 
       // 2. Fetch buses
       try {
-        const busesRes = await fetch(`${API_BASE}/buses`, { headers });
+        const busesRes = await fetch(`${API_BASE}/buses`, { headers, credentials: "include" });
         if (busesRes.ok) {
           const rawBuses = await busesRes.json();
           const busesArr = Array.isArray(rawBuses) ? rawBuses : (rawBuses && Array.isArray(rawBuses.value) ? rawBuses.value : []);
@@ -276,7 +403,7 @@ export default function AgencyDashboard() {
 
       // 3. Fetch colis
       try {
-        const colisRes = await fetch(`${API_BASE}/colis`, { headers });
+        const colisRes = await fetch(`${API_BASE}/colis`, { headers, credentials: "include" });
         if (colisRes.ok) {
           const rawColis = await colisRes.json();
           const colisArr = Array.isArray(rawColis) ? rawColis : (rawColis && Array.isArray(rawColis.value) ? rawColis.value : []);
@@ -289,7 +416,7 @@ export default function AgencyDashboard() {
 
       // 4. Fetch all messages
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${storedAgencyId}`, { headers });
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${storedAgencyId}`, { headers, credentials: "include" });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -310,7 +437,7 @@ export default function AgencyDashboard() {
 
       // 5. Fetch agency profile
       try {
-        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${storedAgencyId}`, { headers });
+        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${storedAgencyId}`, { headers, credentials: "include" });
         if (profileRes.ok) {
           const p = await profileRes.json();
           if (p.email) setProfileEmail(p.email);
@@ -326,10 +453,47 @@ export default function AgencyDashboard() {
     };
 
     hydrateFromApi();
-  }, []);
+  }, [user, userLoading]);
 
-  // Helper to resolve the active agency ID
-  const currentAgencyId = PARTNER_AGENCIES.findIndex(a => a.name === selectedAgencyName) + 1;
+  // Notifications (Agence)
+  const [agencyNotifications, setAgencyNotifications] = useState<any[]>([]);
+  const [agencyUnread, setAgencyUnread] = useState(0);
+  const [showAgencyNotifs, setShowAgencyNotifs] = useState(false);
+  const agencyLastUnreadRef = useRef(0);
+
+  const fetchAgencyNotifications = async () => {
+    const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000/api/agency` : (process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api/agency` : 'http://192.168.100.107:5000/api/agency'));
+    try {
+      const res = await fetch(`${API_BASE}/notifications?agency_id=${currentAgencyId}`, { credentials: 'include' });
+      if (res.ok) {
+        const list = await res.json();
+        setAgencyNotifications(list);
+        const unread = (list || []).filter((n: any) => !n.read).length;
+        setAgencyUnread(unread);
+        if (unread > agencyLastUnreadRef.current) {
+          try { const audio = new Audio(); /* silent fallback */ } catch {}
+        }
+        agencyLastUnreadRef.current = unread;
+      }
+    } catch {}
+  };
+
+  const markAgencyNotificationsRead = async () => {
+    const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000/api/agency` : (process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/api/agency` : 'http://192.168.100.107:5000/api/agency'));
+    try {
+      const unread = (agencyNotifications || []).filter((n: any) => !n.read);
+      await Promise.all(unread.map((n: any) => fetch(`${API_BASE}/notifications/${n.id}/read?agency_id=${currentAgencyId}`, { method: 'PUT', credentials: 'include' })));
+      setAgencyNotifications((prev) => prev.map((n: any) => ({ ...n, read: true })));
+      setAgencyUnread(0);
+      agencyLastUnreadRef.current = 0;
+    } catch {}
+  };
+
+  const formatContactValue = (value?: string | null, fallback = "—") => {
+    if (!value) return fallback;
+    const trimmed = `${value}`.trim();
+    return trimmed.length ? trimmed : fallback;
+  };
 
   // Filter journeys list to only display operations of the selected agency
   const agencyJourneys = journeysState.filter(j => 
@@ -378,7 +542,7 @@ export default function AgencyDashboard() {
       const headers = getAuthHeaders();
       try {
         await Promise.all(journeysState.map(async (j) => {
-          const res = await fetch(`${API_BASE}/passengers/${j.id}`, { headers });
+          const res = await fetch(`${API_BASE}/passengers/${j.id}`, { headers, credentials: "include" });
           if (res.ok) {
             const rawPassengers = await res.json();
             newPassengersMap[j.id] = rawPassengers.map((p: any) => ({
@@ -408,7 +572,7 @@ export default function AgencyDashboard() {
     const refetchForAgency = async () => {
       const headers = getAuthHeaders();
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers });
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -428,7 +592,7 @@ export default function AgencyDashboard() {
       }
 
       try {
-        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${currentAgencyId}`, { headers });
+        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
         if (profileRes.ok) {
           const p = await profileRes.json();
           setProfileEmail(p.email || "");
@@ -451,7 +615,7 @@ export default function AgencyDashboard() {
     const pollMessages = async () => {
       const headers = getAuthHeaders();
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers });
+        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -506,10 +670,11 @@ export default function AgencyDashboard() {
     
     const markAsRead = async () => {
       try {
-        const storedAgencyId = localStorage.getItem("safetrip_agency_id") || "1";
+        const storedAgencyId = user ? (user.agencyId || 1) : 1;
         await fetch(`${API_BASE}/messages/${activeContactId}/read?agency_id=${storedAgencyId}`, {
           method: "PUT",
           headers: getAuthHeaders(),
+          credentials: "include",
           body: JSON.stringify({ role: "agency" })
         });
       } catch (err) {
@@ -529,17 +694,12 @@ export default function AgencyDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.setItem("safetrip_logged_in", "false");
-    localStorage.removeItem("safetrip_user_role");
-    localStorage.removeItem("safetrip_token");
-    localStorage.removeItem("safetrip_user_email");
-    localStorage.removeItem("safetrip_user_name");
-    router.push("/login");
+    contextLogout();
   };
 
   const handleAgencySwitch = (name: string) => {
     setSelectedAgencyName(name);
-    localStorage.setItem("safetrip_active_agency", name);
+    // localStorage removed
     const firstJ = journeysState.find(j => 
       j.operator.toLowerCase().includes(name.split(" ")[0].toLowerCase())
     );
@@ -613,6 +773,7 @@ export default function AgencyDashboard() {
         const res = await fetch(`${API_BASE}/journeys`, {
           method: "POST",
           headers: getAuthHeaders(),
+          credentials: "include",
           body: JSON.stringify({
             bus_id: selectedBusForJourney.id,
             operator: `${activeAgencyObj.name} ${selectedBusForJourney.busClass}`,
@@ -669,9 +830,8 @@ export default function AgencyDashboard() {
           amenityKeys: selectedAmenities
         };
         const updatedJourneys = [...journeysState, newJourney];
-        localStorage.setItem("safetrip_journeys", JSON.stringify(updatedJourneys));
+        sessionStorage.setItem("safetrip_journeys", JSON.stringify(updatedJourneys));
         setJourneysState(updatedJourneys);
-        setSelectedJourneyId(newJourney.id);
         showToast(`Trajet planifié en local (hors-ligne). Erreur BD : ${err?.message || "Inconnue"}`, false);
       }
 
@@ -694,7 +854,8 @@ export default function AgencyDashboard() {
     try {
       const res = await fetch(`${API_BASE}/journeys/${journeyId}`, {
         method: "DELETE",
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
+        credentials: "include"
       });
 
       if (res.ok) {
@@ -718,6 +879,133 @@ export default function AgencyDashboard() {
     }
   };
 
+  const openAddBusModal = () => {
+    setEditingBus(null);
+    setBusFormPlaque("");
+    setBusFormClass("Classique");
+    setBusFormCapacity(50);
+    setBusFormStatus("Disponible");
+    setBusFormAmenities([]);
+    setIsBusModalOpen(true);
+  };
+
+  const openEditBusModal = (bus: Bus) => {
+    setEditingBus(bus);
+    setBusFormPlaque(bus.plaque);
+    setBusFormClass(bus.busClass);
+    setBusFormCapacity(bus.capacity);
+    setBusFormStatus(bus.status);
+    setBusFormAmenities(bus.amenities);
+    setIsBusModalOpen(true);
+  };
+
+  const toggleFormBusAmenity = (key: string) => {
+    if (busFormAmenities.includes(key)) {
+      setBusFormAmenities(prev => prev.filter(k => k !== key));
+    } else {
+      setBusFormAmenities(prev => [...prev, key]);
+    }
+  };
+
+  const handleBusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!busFormPlaque.trim()) {
+      showToast("La plaque d'immatriculation est requise.", false);
+      return;
+    }
+
+    const payload = {
+      id: editingBus ? editingBus.id : `BUS-${Date.now()}`,
+      plaque: busFormPlaque.trim(),
+      bus_class: busFormClass,
+      capacity: busFormCapacity,
+      status: busFormStatus,
+      amenities: busFormAmenities,
+      agency_name: selectedAgencyName
+    };
+
+    try {
+      const headers = getAuthHeaders();
+      if (editingBus) {
+        // UPDATE
+        const res = await fetch(`${API_BASE}/buses/${editingBus.id}`, {
+          method: "PUT",
+          headers,
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          const mapped: Bus = {
+            id: updated.id,
+            agencyId: updated.agency_id || currentAgencyId,
+            plaque: updated.plaque,
+            busClass: updated.bus_class,
+            capacity: updated.capacity,
+            occupied: updated.occupied || 0,
+            status: updated.status,
+            amenities: updated.amenities || []
+          };
+          setBusesState(prev => prev.map(b => b.id === editingBus.id ? mapped : b));
+          showToast("🚌 Le bus a été mis à jour avec succès !");
+          setIsBusModalOpen(false);
+        } else {
+          throw new Error("Erreur de mise à jour");
+        }
+      } else {
+        // CREATE
+        const res = await fetch(`${API_BASE}/buses`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const created = await res.json();
+          const mapped: Bus = {
+            id: created.id,
+            agencyId: created.agency_id || currentAgencyId,
+            plaque: created.plaque,
+            busClass: created.bus_class,
+            capacity: created.capacity,
+            occupied: created.occupied || 0,
+            status: created.status,
+            amenities: created.amenities || []
+          };
+          setBusesState(prev => [...prev, mapped]);
+          showToast("🚌 Nouveau bus ajouté à votre flotte !");
+          setIsBusModalOpen(false);
+        } else {
+          throw new Error("Erreur d'ajout");
+        }
+      }
+    } catch (err: any) {
+      showToast(`Une erreur est survenue: ${err.message}`, false);
+    }
+  };
+
+  const handleDeleteBus = async (id: string) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce bus de votre flotte ? Cette action est irréversible.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/buses/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        credentials: "include"
+      });
+      if (res.ok) {
+        setBusesState(prev => prev.filter(b => b.id !== id));
+        showToast("🗑️ Bus supprimé avec succès.");
+      } else {
+        throw new Error("Erreur de suppression");
+      }
+    } catch (err: any) {
+      showToast(`Impossible de supprimer le bus: ${err.message}`, false);
+    }
+  };
+
   const togglePassengerCheckIn = async (passengerId: number) => {
     if (selectedJourneyId === null) return;
     
@@ -736,7 +1024,8 @@ export default function AgencyDashboard() {
 
     // Persist to backend
     try {
-      await fetch(`${API_BASE}/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT", headers: getAuthHeaders() });
+      await fetch(`${API_BASE}/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT", headers: getAuthHeaders(),
+        credentials: "include" });
     } catch { /* silent fallback */ }
     
     showToast("Statut d'enregistrement du passager mis à jour.");
@@ -764,7 +1053,8 @@ export default function AgencyDashboard() {
 
     // Persist scan to backend
     try {
-      await fetch(`${API_BASE}/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT", headers: getAuthHeaders() });
+      await fetch(`${API_BASE}/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT", headers: getAuthHeaders(),
+        credentials: "include" });
     } catch { /* silent fallback */ }
 
     // 2. Generate or update colis
@@ -780,7 +1070,11 @@ export default function AgencyDashboard() {
       tripDate: "25 Mai 2026 · 06:15",
       agency: selectedAgencyName,
       qrRef: `QR-FX${activeScanJourneyId.toString().slice(-2)}-${scanningPassenger.id}`,
-      fragile: scanningPassenger.id % 3 === 0
+      fragile: scanningPassenger.id % 3 === 0,
+      senderName: scanningPassenger.name,
+      senderPhone: scanningPassenger.phone,
+      recipientName: scanningPassenger.name,
+      recipientPhone: scanningPassenger.phone
     };
 
     setColisState(prev => {
@@ -816,6 +1110,7 @@ export default function AgencyDashboard() {
       await fetch(`${API_BASE}/messages/${activeContactId}`, {
         method: "POST",
         headers: getAuthHeaders(),
+        credentials: "include",
         body: JSON.stringify({ sender: "agency", text: chatInputText, time: timeStr, agency_id: currentAgencyId })
       });
     } catch { /* silent fallback */ }
@@ -836,7 +1131,8 @@ export default function AgencyDashboard() {
       await fetch(`${API_BASE}/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(customProfile)
+        body: JSON.stringify(customProfile),
+        credentials: "include"
       });
     } catch (err) {
       console.error("⚠️ Error saving profile to Supabase:", err);
@@ -1059,6 +1355,14 @@ export default function AgencyDashboard() {
     });
   }
 
+  if (userLoading || !user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#071A0E', color: '#fcd116', fontSize: '1.2rem', fontWeight: 'bold' }}>
+        Chargement du Tableau de Bord Agence... 🚌
+      </div>
+    );
+  }
+
   return (
     <div className={styles.clientDashboardLayout}>
       {toastMessage && (
@@ -1129,14 +1433,27 @@ export default function AgencyDashboard() {
 
           <button
             type="button"
-            className={`${styles.sidebarNavItem} ${agencyActiveTab === "courier" ? styles.sidebarNavItemActive : ""}`}
-            onClick={() => setAgencyActiveTab("courier")}
+            className={`${styles.sidebarNavItem} ${agencyActiveTab === "luggage" ? styles.sidebarNavItemActive : ""}`}
+            onClick={() => setAgencyActiveTab("luggage")}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
               <rect x="2" y="7" width="20" height="14" rx="2" />
               <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
             </svg>
-            Courrier &amp; Colis
+            Bagages Voyageurs
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.sidebarNavItem} ${agencyActiveTab === "courier" ? styles.sidebarNavItemActive : ""}`}
+            onClick={() => setAgencyActiveTab("courier")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg>
+            Courriers &amp; Colis
           </button>
 
           <button
@@ -1202,6 +1519,25 @@ export default function AgencyDashboard() {
 
           <button
             type="button"
+            className={`${styles.sidebarNavItem} ${agencyActiveTab === "scanner" ? styles.sidebarNavItemActive : ""}`}
+            onClick={() => setAgencyActiveTab("scanner")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.sidebarNavIcon}>
+              <rect x="3" y="3" width="5" height="5" rx="1"/>
+              <rect x="16" y="3" width="5" height="5" rx="1"/>
+              <rect x="3" y="16" width="5" height="5" rx="1"/>
+              <path d="M21 16h-3v3"/>
+              <path d="M21 21h-5"/>
+              <path d="M12 3v5"/>
+              <path d="M12 12v3"/>
+              <path d="M3 12h5"/>
+              <path d="M12 12h5"/>
+            </svg>
+            Scanner QR
+          </button>
+
+          <button
+            type="button"
             className={`${styles.sidebarNavItem} ${agencyActiveTab === "profil" ? styles.sidebarNavItemActive : ""}`}
             onClick={() => setAgencyActiveTab("profil")}
           >
@@ -1248,7 +1584,43 @@ export default function AgencyDashboard() {
             </div>
           </div>
 
-          <div className={styles.bannerControls} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className={styles.bannerControls} style={{ display: "flex", alignItems: "center", gap: "10px", position: 'relative' }}>
+            <button
+              type="button"
+              onClick={async () => { await fetchAgencyNotifications(); setShowAgencyNotifs(s => !s); if (!showAgencyNotifs) await markAgencyNotificationsRead(); }}
+              style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 9999, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(0,0,0,0.15)', color: '#fff' }}
+              title="Notifications agence"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ width: 18, height: 18 }}>
+                <path d="M18 8a6 6 0 1 0-12 0c0 7-3 5-3 7h18c0-2-3 0-3-7" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {agencyUnread > 0 && (
+                <span style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: '#fff', borderRadius: 9999, padding: '1px 6px', fontSize: 10, fontWeight: 800 }}>
+                  {agencyUnread}
+                </span>
+              )}
+            </button>
+            {showAgencyNotifs && (
+              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 8, width: 360, maxWidth: '92vw', background: '#fff', color: '#0f172a', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 14px 40px rgba(0,0,0,0.18)', overflow: 'hidden', zIndex: 50 }}>
+                <div style={{ padding: '10px 12px', borderBottom: '1px solid #e2e8f0', fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Notifications Agence</span>
+                  <button onClick={() => setShowAgencyNotifs(false)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>×</button>
+                </div>
+                <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  {(agencyNotifications || []).slice(0, 25).map((n: any) => (
+                    <div key={n.id} style={{ padding: '10px 12px', borderBottom: '1px solid #f1f5f9', background: n.read ? '#fff' : '#f8fafc' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{n.title || n.type}</div>
+                      {n.body && <div style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>{n.body}</div>}
+                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{new Date(n.created_at).toLocaleString('fr-FR')}</div>
+                    </div>
+                  ))}
+                  {(!agencyNotifications || agencyNotifications.length === 0) && (
+                    <div style={{ padding: '16px 12px', color: '#64748b', fontSize: 12 }}>Aucune notification.</div>
+                  )}
+                </div>
+              </div>
+            )}
             <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "rgba(255,255,255,0.7)", letterSpacing: "0.5px" }}>CONNECTÉ EN TANT QUE :</span>
             <span style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", color: "#ffffff", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", fontSize: "0.82rem", fontFamily: "monospace" }}>
               {email}
@@ -1485,11 +1857,97 @@ export default function AgencyDashboard() {
                 <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#0A2F1D" }}>Gestion de la Flotte de Bus</h2>
                 <p style={{ fontSize: "0.8rem", color: "#718096" }}>{busesState.filter(bus => bus.agencyId === currentAgencyId).length} bus actifs répertoriés</p>
               </div>
+              <button 
+                onClick={openAddBusModal}
+                style={{
+                  background: "#00673C",
+                  color: "white",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  fontSize: "0.85rem",
+                  fontFamily: "inherit"
+                }}
+              >
+                ➕ Ajouter un Bus
+              </button>
+            </div>
+
+            {/* Smart Search Bar */}
+            <div style={{ marginBottom: "20px", display: "flex", gap: "10px" }}>
+              <div style={{ position: "relative", flex: 1, maxWidth: "500px" }}>
+                <span style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", fontSize: "1.1rem" }}>
+                  🔍
+                </span>
+                <input 
+                  type="text"
+                  placeholder="Rechercher plaque, classe (VIP...), statut, équipement (wifi, clim...)"
+                  value={busSearchQuery}
+                  onChange={(e) => setBusSearchQuery(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "12px 16px 12px 42px",
+                    borderRadius: "12px",
+                    border: "1px solid #edf2f7",
+                    outline: "none",
+                    fontSize: "0.85rem",
+                    boxShadow: "0 2px 5px rgba(0,0,0,0.02)",
+                    background: "white",
+                    color: "#2d3748"
+                  }}
+                />
+                {busSearchQuery && (
+                  <button 
+                    onClick={() => setBusSearchQuery("")}
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: "0.9rem",
+                      color: "#a0aec0"
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className={styles.busGrid}>
-              {busesState.filter(bus => bus.agencyId === currentAgencyId).map(bus => (
-                <div key={bus.id} className={styles.busCard}>
+              {busesState
+                .filter(bus => bus.agencyId === currentAgencyId)
+                .filter(bus => {
+                  if (!busSearchQuery) return true;
+                  const query = busSearchQuery.toLowerCase();
+                  
+                  // Match plaque
+                  const matchesPlaque = bus.plaque.toLowerCase().includes(query);
+                  
+                  // Match class
+                  const matchesClass = bus.busClass.toLowerCase().includes(query);
+                  
+                  // Match status
+                  const matchesStatus = bus.status.toLowerCase().includes(query);
+                  
+                  // Match amenities (friendly labels)
+                  const matchesAmenities = bus.amenities.some(am => {
+                    const amLabel = am === "wifi" ? "wi-fi" : am === "ac" ? "climatisation" : am === "toilet" ? "toilettes" : am === "catering" ? "restauration" : "prises";
+                    return am.toLowerCase().includes(query) || amLabel.includes(query);
+                  });
+
+                  return matchesPlaque || matchesClass || matchesStatus || matchesAmenities;
+                })
+                .map(bus => (
+                  <div key={bus.id} className={styles.busCard}>
                   {/* Status Pill top-right */}
                   <span className={`${styles.busStatusBadge} ${
                     bus.status === "En route" ? styles.busStatusEnRoute :
@@ -1501,18 +1959,36 @@ export default function AgencyDashboard() {
 
                   <div className={styles.busCardHeader}>
                     <span className={styles.busPlaque}>{bus.plaque}</span>
-                    <span className={`${styles.busClassBadge} ${
-                      bus.busClass === "VIP" ? styles.busClassVIP :
-                      bus.busClass === "Confort" ? styles.busClassConfort :
-                      bus.busClass === "Executive Class" ? styles.busClassExecutive :
-                      styles.busClassClassique
-                    }`}>
-                      {bus.busClass}
-                    </span>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                      <button 
+                        onClick={() => openEditBusModal(bus)} 
+                        title="Modifier" 
+                        style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "1rem", padding: "2px" }}
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteBus(bus.id)} 
+                        title="Supprimer" 
+                        style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: "1rem", padding: "2px" }}
+                      >
+                        🗑️
+                      </button>
+                      <span className={`${styles.busClassBadge} ${
+                        bus.busClass === "VIP" ? styles.busClassVIP :
+                        bus.busClass === "Confort" ? styles.busClassConfort :
+                        bus.busClass === "Executive Class" ? styles.busClassExecutive :
+                        styles.busClassClassique
+                      }`}>
+                        {bus.busClass}
+                      </span>
+                    </div>
                   </div>
 
                   <div className={styles.busCardBody}>
-                    <h3 style={{ fontSize: "0.95rem", fontWeight: 800, margin: "5px 0 0 0" }}>Bus #{bus.id.split("-")[1]}</h3>
+                    <h3 style={{ fontSize: "0.95rem", fontWeight: 800, margin: "5px 0 0 0" }}>
+                      Bus {selectedAgencyName}
+                    </h3>
                     
                     <div>
                       <div className={styles.busCapacityLabel}>
@@ -1554,79 +2030,444 @@ export default function AgencyDashboard() {
                 </div>
               ))}
             </div>
+
+            {/* Bus CRUD Modal */}
+            {isBusModalOpen && (
+              <div style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: "rgba(0,0,0,0.5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1000,
+                backdropFilter: "blur(4px)"
+              }}>
+                <div style={{
+                  background: "white",
+                  borderRadius: "16px",
+                  width: "100%",
+                  maxWidth: "480px",
+                  padding: "24px",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                  color: "#2d3748"
+                }}>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#0A2F1D", marginBottom: "16px" }}>
+                    {editingBus ? "Modifier le Bus" : "Ajouter un Nouveau Bus"}
+                  </h3>
+                  <form onSubmit={handleBusSubmit}>
+                    <div style={{ marginBottom: "12px" }}>
+                      <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#4a5568", marginBottom: "4px" }}>
+                        Plaque d&apos;immatriculation *
+                      </label>
+                      <input 
+                        type="text" 
+                        required 
+                        placeholder="Ex: LT-2100-B" 
+                        value={busFormPlaque}
+                        onChange={(e) => setBusFormPlaque(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                          outline: "none",
+                          fontSize: "0.9rem"
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ marginBottom: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#4a5568", marginBottom: "4px" }}>
+                          Classe
+                        </label>
+                        <select 
+                          value={busFormClass}
+                          onChange={(e) => setBusFormClass(e.target.value as any)}
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            borderRadius: "8px",
+                            border: "1px solid #e2e8f0",
+                            outline: "none",
+                            fontSize: "0.9rem"
+                          }}
+                        >
+                          <option value="Classique">Classique</option>
+                          <option value="Confort">Confort</option>
+                          <option value="VIP">VIP</option>
+                          <option value="Executive Class">Executive Class</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#4a5568", marginBottom: "4px" }}>
+                          Capacité (places)
+                        </label>
+                        <input 
+                          type="number" 
+                          required 
+                          min={1}
+                          value={busFormCapacity}
+                          onChange={(e) => setBusFormCapacity(parseInt(e.target.value) || 50)}
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            borderRadius: "8px",
+                            border: "1px solid #e2e8f0",
+                            outline: "none",
+                            fontSize: "0.9rem"
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: "16px" }}>
+                      <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#4a5568", marginBottom: "4px" }}>
+                        Statut opérationnel
+                      </label>
+                      <select 
+                        value={busFormStatus}
+                        onChange={(e) => setBusFormStatus(e.target.value as any)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          borderRadius: "8px",
+                          border: "1px solid #e2e8f0",
+                          outline: "none",
+                          fontSize: "0.9rem"
+                        }}
+                      >
+                        <option value="Disponible">Disponible</option>
+                        <option value="En route">En route</option>
+                        <option value="En maintenance">En maintenance</option>
+                      </select>
+                    </div>
+
+                    <div style={{ marginBottom: "20px" }}>
+                      <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#4a5568", marginBottom: "6px" }}>
+                        Équipements à bord (Amenities)
+                      </label>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                        {[
+                          { key: "wifi", label: "📶 Wi-Fi" },
+                          { key: "ac", label: "❄️ Climatisation" },
+                          { key: "toilet", label: "🚽 Toilettes" },
+                          { key: "catering", label: "🍔 Restauration" },
+                          { key: "plug", label: "🔌 Prises" }
+                        ].map(am => {
+                          const isSelected = busFormAmenities.includes(am.key);
+                          return (
+                            <button
+                              type="button"
+                              key={am.key}
+                              onClick={() => toggleFormBusAmenity(am.key)}
+                              style={{
+                                border: isSelected ? "1px solid #00673C" : "1px solid #e2e8f0",
+                                background: isSelected ? "#eef8f3" : "transparent",
+                                color: isSelected ? "#00673C" : "#718096",
+                                padding: "6px 12px",
+                                borderRadius: "20px",
+                                cursor: "pointer",
+                                fontSize: "0.75rem",
+                                fontWeight: "bold"
+                              }}
+                            >
+                              {am.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsBusModalOpen(false)}
+                        style={{
+                          border: "none",
+                          background: "#e2e8f0",
+                          color: "#4a5568",
+                          padding: "10px 18px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="submit"
+                        style={{
+                          border: "none",
+                          background: "#00673C",
+                          color: "white",
+                          padding: "10px 18px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        Enregistrer
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* TAB 3: COURIER & LUGGAGE MANAGEMENT */}
-        {agencyActiveTab === "courier" && (
-          <div className={styles.tabContentFadeIn}>
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h2 className={styles.panelTitle}>Enregistrement et Suivi des Bagages &amp; Colis</h2>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <button 
-                    className={styles.voirBilletBtn} 
-                    onClick={() => {
-                      if (agencyJourneys.length > 0) {
-                        const defaultP: Passenger = { id: 99, name: "Nouveau Client", phone: "+237 600 00 00 00", seat: "15C", status: "Payé", luggageCount: 1, luggageScanned: false };
-                        handleOpenScanner(defaultP);
-                      } else {
-                        showToast("Planifiez d'abord un trajet pour pouvoir y scanner des bagages !", false);
-                      }
-                    }}
-                    style={{ background: "#00673C", color: "#ffffff", padding: "6px 12px", border: "none", fontSize: "0.8rem", borderRadius: "8px" }}
-                  >
-                    Scanner Nouveau Bagage
-                  </button>
+        {/* TAB 3: LUGGAGE MANAGEMENT */}
+        {agencyActiveTab === "luggage" && (() => {
+          const luggageList = agencyColis.filter(c => c.type === "Valise" || c.type === "Sac" || c.type === "Sac à dos");
+          const filteredLuggage = luggageList.filter(c => 
+            c.label.toLowerCase().includes(luggageSearchText.toLowerCase()) || 
+            c.id.toLowerCase().includes(luggageSearchText.toLowerCase()) ||
+            (c.trip && c.trip.toLowerCase().includes(luggageSearchText.toLowerCase()))
+          );
+          
+          return (
+            <div className={styles.tabContentFadeIn}>
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h2 className={styles.panelTitle}>Enregistrement et Suivi des Bagages Voyageurs</h2>
                 </div>
-              </div>
 
-              <div className={styles.panelBody} style={{ padding: "0" }}>
-                <div className={styles.rosterTableContainer} style={{ border: "none", borderRadius: "0" }}>
-                  <table className={styles.rosterTable}>
-                    <thead>
-                      <tr>
-                        <th>Référence Colis</th>
-                        <th>Description Bagage</th>
-                        <th>Poids &amp; Type</th>
-                        <th>Trajet &amp; Compagnie</th>
-                        <th>Statut Enregistrement</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {agencyColis.map(colis => (
-                        <tr key={colis.id}>
-                          <td><strong style={{ color: "#00673C", fontFamily: "monospace" }}>{colis.id}</strong></td>
-                          <td>
-                            <div>
-                              <strong>{colis.label}</strong>
-                              {colis.fragile && <span style={{ background: "#fff5f5", color: "#e53e3e", fontSize: "0.65rem", padding: "2px 6px", borderRadius: "4px", marginLeft: "6px", fontWeight: "800" }}>⚠️ FRAGILE</span>}
-                            </div>
-                          </td>
-                          <td>{colis.weight} KG • {colis.type} ({colis.color})</td>
-                          <td>
-                            <div>
-                              <strong>{colis.trip}</strong>
-                              <span style={{ display: "block", fontSize: "0.7rem", color: "#a0aec0" }}>{colis.tripDate}</span>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`${styles.statusPill} ${
-                              colis.status === "Livré" || colis.status === "À bord du bus" ? styles.statusChecked :
-                              colis.status === "Scanné en gare" ? styles.statusPaid : styles.statusPending
-                            }`}>
-                              {colis.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className={styles.panelBody} style={{ padding: "20px" }}>
+                  <h3 style={{ fontSize: "1rem", fontWeight: "800", color: "#0A2F1D", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    🎒 Bagages Voyageurs en cours
+                    <span style={{ fontSize: "0.75rem", background: "rgba(0,103,60,0.1)", color: "#00673C", padding: "2px 8px", borderRadius: "20px", fontWeight: "800" }}>
+                      {filteredLuggage.length} bagage{filteredLuggage.length > 1 ? "s" : ""}
+                    </span>
+                  </h3>
+
+                  {/* Smart Search Bar */}
+                  <div style={{ marginBottom: "15px" }}>
+                    <div style={{ position: "relative", width: "100%", maxWidth: "400px" }}>
+                      <input 
+                        type="text"
+                        placeholder="Rechercher par nom de voyageur ou référence..."
+                        value={luggageSearchText}
+                        onChange={(e) => setLuggageSearchText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 16px 10px 38px",
+                          borderRadius: "10px",
+                          border: "1px solid #edf2f7",
+                          fontSize: "0.85rem",
+                          fontWeight: "700",
+                          outline: "none",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+                          transition: "all 0.2s ease"
+                        }}
+                      />
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#718096" strokeWidth="2.5" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px" }}>
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                    </div>
+                  </div>
+                  
+                  {filteredLuggage.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px", color: "rgba(0,0,0,0.4)", fontSize: "0.85rem", background: "rgba(0,0,0,0.01)", borderRadius: "12px", border: "1px dashed rgba(0,0,0,0.08)" }}>
+                      {luggageSearchText ? "Aucun bagage ne correspond à votre recherche." : "Aucun bagage de voyageur enregistré pour le moment."}
+                    </div>
+                  ) : (
+                    <div className={styles.rosterTableContainer} style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #edf2f7", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)" }}>
+                      <table className={styles.rosterTable}>
+                        <thead>
+                          <tr>
+                            <th>Référence Colis</th>
+                            <th>Description Bagage</th>
+                            <th>Poids &amp; Type</th>
+                            <th>Trajet &amp; Compagnie</th>
+                            <th style={{ textAlign: "center" }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredLuggage.map(colis => (
+                            <tr key={colis.id}>
+                              <td><strong style={{ color: "#00673C", fontFamily: "monospace" }}>{colis.id}</strong></td>
+                              <td>
+                                <div>
+                                  <strong>{colis.label}</strong>
+                                  {colis.fragile && <span style={{ background: "#fff5f5", color: "#e53e3e", fontSize: "0.65rem", padding: "2px 6px", borderRadius: "4px", marginLeft: "6px", fontWeight: "800" }}>⚠️ FRAGILE</span>}
+                                </div>
+                              </td>
+                              <td>{colis.weight} KG • {colis.type} ({colis.color})</td>
+                              <td>
+                                <div>
+                                  <strong>{colis.trip}</strong>
+                                  <span style={{ display: "block", fontSize: "0.7rem", color: "#a0aec0" }}>{colis.tripDate}</span>
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedColis(colis)}
+                                  style={{
+                                    padding: "6px 14px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: "800",
+                                    background: "rgba(0,103,60,0.08)",
+                                    color: "#00673C",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = "#00673C";
+                                    e.currentTarget.style.color = "#ffffff";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "rgba(0,103,60,0.08)";
+                                    e.currentTarget.style.color = "#00673C";
+                                  }}
+                                >
+                                  Voir le ticket
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
+
+        {/* TAB 3.5: COURIER MANAGEMENT */}
+        {agencyActiveTab === "courier" && (() => {
+          const courierList = agencyColis.filter(c => c.type === "Carton" || c.type === "Colis");
+          const filteredCourier = courierList.filter(c => 
+            c.label.toLowerCase().includes(courierSearchText.toLowerCase()) || 
+            c.id.toLowerCase().includes(courierSearchText.toLowerCase()) ||
+            (c.trip && c.trip.toLowerCase().includes(courierSearchText.toLowerCase()))
+          );
+
+          return (
+            <div className={styles.tabContentFadeIn}>
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h2 className={styles.panelTitle}>Enregistrement et Expédition des Colis &amp; Courriers</h2>
+                </div>
+
+                <div className={styles.panelBody} style={{ padding: "20px" }}>
+                  <h3 style={{ fontSize: "1rem", fontWeight: "800", color: "#0A2F1D", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    📦 Colis &amp; Expéditions (Courriers) enregistrés
+                    <span style={{ fontSize: "0.75rem", background: "rgba(0,103,60,0.1)", color: "#00673C", padding: "2px 8px", borderRadius: "20px", fontWeight: "800" }}>
+                      {filteredCourier.length} colis
+                    </span>
+                  </h3>
+
+                  {/* Smart Search Bar */}
+                  <div style={{ marginBottom: "15px" }}>
+                    <div style={{ position: "relative", width: "100%", maxWidth: "400px" }}>
+                      <input 
+                        type="text"
+                        placeholder="Rechercher par nom ou référence..."
+                        value={courierSearchText}
+                        onChange={(e) => setCourierSearchText(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 16px 10px 38px",
+                          borderRadius: "10px",
+                          border: "1px solid #edf2f7",
+                          fontSize: "0.85rem",
+                          fontWeight: "700",
+                          outline: "none",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.02)",
+                          transition: "all 0.2s ease"
+                        }}
+                      />
+                      <svg viewBox="0 0 24 24" fill="none" stroke="#718096" strokeWidth="2.5" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", width: "16px", height: "16px" }}>
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {filteredCourier.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px", color: "rgba(0,0,0,0.4)", fontSize: "0.85rem", background: "rgba(0,0,0,0.01)", borderRadius: "12px", border: "1px dashed rgba(0,0,0,0.08)" }}>
+                      {courierSearchText ? "Aucun colis ne correspond à votre recherche." : "Aucun colis d&apos;expédition enregistré pour le moment."}
+                    </div>
+                  ) : (
+                    <div className={styles.rosterTableContainer} style={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #edf2f7", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02)" }}>
+                      <table className={styles.rosterTable}>
+                        <thead>
+                          <tr>
+                            <th>Référence Colis</th>
+                            <th>Description Colis</th>
+                            <th>Poids &amp; Type</th>
+                            <th>Trajet &amp; Compagnie</th>
+                            <th style={{ textAlign: "center" }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredCourier.map(colis => (
+                            <tr key={colis.id}>
+                              <td><strong style={{ color: "#00673C", fontFamily: "monospace" }}>{colis.id}</strong></td>
+                              <td>
+                                <div>
+                                  <strong>{colis.label}</strong>
+                                  {colis.fragile && <span style={{ background: "#fff5f5", color: "#e53e3e", fontSize: "0.65rem", padding: "2px 6px", borderRadius: "4px", marginLeft: "6px", fontWeight: "800" }}>⚠️ FRAGILE</span>}
+                                </div>
+                              </td>
+                              <td>{colis.weight} KG • {colis.type} ({colis.color})</td>
+                              <td>
+                                <div>
+                                  <strong>{colis.trip}</strong>
+                                  <span style={{ display: "block", fontSize: "0.7rem", color: "#a0aec0" }}>{colis.tripDate}</span>
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedColis(colis)}
+                                  style={{
+                                    padding: "6px 14px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: "800",
+                                    background: "rgba(0,103,60,0.08)",
+                                    color: "#00673C",
+                                    border: "none",
+                                    borderRadius: "8px",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = "#00673C";
+                                    e.currentTarget.style.color = "#ffffff";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = "rgba(0,103,60,0.08)";
+                                    e.currentTarget.style.color = "#00673C";
+                                  }}
+                                >
+                                  Voir le ticket
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* TAB 4: HORAIRES & TRAJETS (PLANNER + SCHEDULER + PASSENGERS ROSTER) */}
         {agencyActiveTab === "horaire" && (
@@ -2228,6 +3069,729 @@ export default function AgencyDashboard() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 2. LUGGAGE/PACKAGE DIGITAL TICKET MODAL OVERLAY */}
+      {selectedColis && (() => {
+        const getLuggageQrPayload = (colis: any) => {
+          return [
+            `SAFETRIP - ÉTIQUETTE BAGAGE/COLIS`,
+            `Réf: ${colis.qrRef || colis.id}`,
+            `Agence: ${colis.agency}`,
+            `-------------------------`,
+            `EXPÉDITEUR:`,
+            `Nom: ${colis.senderName || colis.client_name || 'N/A'}`,
+            `Tél: ${colis.senderPhone || colis.client_phone || 'N/A'}`,
+            `-------------------------`,
+            `DESTINATAIRE:`,
+            `Nom: ${colis.recipientName || 'N/A'}`,
+            `Tél: ${colis.recipientPhone || 'N/A'}`
+          ].join('\n');
+        };
+
+        const getLuggageQrUrl = (c: any, size = 180) => 
+          `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=10&data=${encodeURIComponent(getLuggageQrPayload(c))}`;
+        
+        return (
+          <div 
+            onClick={() => setSelectedColis(null)}
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2000,
+              padding: "20px"
+            }}
+          >
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: "380px",
+                backgroundColor: "#0A2F1D",
+                borderRadius: "20px",
+                boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+                color: "#ffffff",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.1)",
+                fontFamily: "inherit"
+              }}
+            >
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px dashed rgba(255,255,255,0.1)" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: "900", color: "#fcd116", letterSpacing: "1px" }}>TICKET NUMÉRIQUE</span>
+                <button 
+                  onClick={() => setSelectedColis(null)}
+                  style={{
+                    background: "rgba(255,255,255,0.1)",
+                    border: "none",
+                    width: "26px",
+                    height: "26px",
+                    borderRadius: "50%",
+                    color: "#ffffff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "bold"
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Ticket Body */}
+              <div style={{ padding: "20px 24px" }}>
+                {/* Branding row */}
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+                  <img src="/images/logo-removebg-preview (2).png" alt="SafeTrip" style={{ height: "26px", objectFit: "contain" }} />
+                  <span style={{ width: "4px", height: "4px", background: "rgba(255,255,255,0.3)", borderRadius: "50%" }}></span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {PARTNER_AGENCIES.find(a => a.name.toLowerCase().includes((selectedColis.agency || "").split(" ")[0].toLowerCase()))?.logo ? (
+                      <img src={PARTNER_AGENCIES.find(a => a.name.toLowerCase().includes((selectedColis.agency || "").split(" ")[0].toLowerCase()))?.logo} alt={selectedColis.agency} style={{ height: "20px", objectFit: "contain" }} />
+                    ) : (
+                      <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "rgba(255,255,255,0.7)" }}>{selectedColis.agency || selectedAgencyName}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Reference */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", background: "rgba(255,255,255,0.04)", padding: "10px 14px", borderRadius: "10px" }}>
+                  <span style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.5)", fontWeight: "800" }}>RÉFÉRENCE</span>
+                  <span style={{ fontSize: "0.85rem", fontWeight: "900", color: "#fcd116", fontFamily: "monospace" }}>{selectedColis.id}</span>
+                </div>
+
+                {/* Route Section */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "20px 0" }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.5)", fontWeight: "800", textTransform: "uppercase" }}>TRAJET</span>
+                    <span style={{ fontSize: "1.1rem", fontWeight: "900", color: "#ffffff", marginTop: "4px" }}>{selectedColis.trip.split(" → ")[0]}</span>
+                  </div>
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 15px" }}>
+                    <div style={{ height: "2px", background: "rgba(252,209,22,0.3)", flex: 1, position: "relative" }}>
+                      <span style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", width: "6px", height: "6px", background: "#fcd116", borderRadius: "50%" }}></span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", textAlign: "right" }}>
+                    <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.5)", fontWeight: "800", textTransform: "uppercase" }}>DESTINATION</span>
+                    <span style={{ fontSize: "1.1rem", fontWeight: "900", color: "#ffffff", marginTop: "4px" }}>{selectedColis.trip.split(" → ")[1] || selectedColis.trip}</span>
+                  </div>
+                </div>
+
+                {/* Sender & Recipient */}
+                <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "16px", padding: "14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "16px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ paddingRight: "6px" }}>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.5)", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.6px" }}>EXPÉDITEUR</span>
+                    <span style={{ display: "block", fontSize: "0.9rem", fontWeight: 900, color: "#ffffff", marginTop: "5px" }}>
+                      {formatContactValue(selectedColis.senderName || selectedColis.clientName, "Non renseigné")}
+                    </span>
+                    <span style={{ display: "block", fontSize: "0.7rem", color: "rgba(255,255,255,0.65)", marginTop: "2px" }}>
+                      {formatContactValue(selectedColis.senderPhone || selectedColis.clientPhone, "Téléphone indisponible")}
+                    </span>
+                  </div>
+                  <div style={{ paddingLeft: "6px", textAlign: "right" }}>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.5)", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.6px" }}>DESTINATAIRE</span>
+                    <span style={{ display: "block", fontSize: "0.9rem", fontWeight: 900, color: "#ffffff", marginTop: "5px" }}>
+                      {formatContactValue(selectedColis.recipientName || selectedColis.clientName, "Non renseigné")}
+                    </span>
+                    <span style={{ display: "block", fontSize: "0.7rem", color: "rgba(255,255,255,0.65)", marginTop: "2px" }}>
+                      {formatContactValue(selectedColis.recipientPhone || selectedColis.clientPhone, "Téléphone indisponible")}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Perforation */}
+                <div style={{ display: "flex", alignItems: "center", margin: "20px -24px", position: "relative" }}>
+                  <div style={{ width: "16px", height: "16px", borderRadius: "0 8px 8px 0", background: "rgba(0,0,0,0.5)", left: 0, position: "absolute" }}></div>
+                  <div style={{ flex: 1, borderTop: "2px dashed rgba(255,255,255,0.12)", margin: "0 16px" }}></div>
+                  <div style={{ width: "16px", height: "16px", borderRadius: "8px 0 0 8px", background: "rgba(0,0,0,0.5)", right: 0, position: "absolute" }}></div>
+                </div>
+
+                {/* Details Grid */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
+                  <div>
+                    <span style={{ display: "block", fontSize: "0.62rem", color: "rgba(255,255,255,0.4)", fontWeight: "800" }}>PROPRIÉTAIRE</span>
+                    <span style={{ display: "block", fontSize: "0.82rem", fontWeight: "800", color: "#ffffff", marginTop: "2px" }}>
+                      {selectedColis.label.replace("Bagage de ", "").replace("Colis de ", "")}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ display: "block", fontSize: "0.62rem", color: "rgba(255,255,255,0.4)", fontWeight: "800" }}>DATE DÉPART</span>
+                    <span style={{ display: "block", fontSize: "0.82rem", fontWeight: "800", color: "#ffffff", marginTop: "2px" }}>
+                      {selectedColis.tripDate.split(" · ")[0]}
+                    </span>
+                  </div>
+                  {selectedColis.fragile && (
+                    <div style={{ gridColumn: "span 2" }}>
+                      <span style={{ display: "inline-block", background: "rgba(229,62,62,0.15)", color: "#feb2b2", fontSize: "0.65rem", padding: "4px 8px", borderRadius: "4px", fontWeight: "900" }}>
+                        ⚠️ FRAGILE
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Perforation 2 */}
+                <div style={{ display: "flex", alignItems: "center", margin: "20px -24px", position: "relative" }}>
+                  <div style={{ width: "16px", height: "16px", borderRadius: "0 8px 8px 0", background: "rgba(0,0,0,0.5)", left: 0, position: "absolute" }}></div>
+                  <div style={{ flex: 1, borderTop: "2px dashed rgba(255,255,255,0.12)", margin: "0 16px" }}></div>
+                  <div style={{ width: "16px", height: "16px", borderRadius: "8px 0 0 8px", background: "rgba(0,0,0,0.5)", right: 0, position: "absolute" }}></div>
+                </div>
+
+                {/* Footer QR code */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", marginTop: "10px" }}>
+                  <img
+                    src={getLuggageQrUrl(selectedColis, 180)}
+                    alt="QR Code"
+                    style={{
+                      width: "110px",
+                      height: "110px",
+                      background: "#ffffff",
+                      padding: "8px",
+                      borderRadius: "12px"
+                    }}
+                  />
+                  <span style={{ fontSize: "0.75rem", fontWeight: "800", fontFamily: "monospace", color: "#fcd116", letterSpacing: "1px" }}>{selectedColis.qrRef}</span>
+                  <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.5)", textAlign: "center", maxWidth: "220px", lineHeight: 1.3 }}>
+                    Scanner ce QR code en cas de perte pour retrouver le propriétaire
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========== SCANNER QR SECTION =========== */}
+      {agencyActiveTab === "scanner" && (
+        <div className={styles.tabContentFadeIn} style={{ maxWidth: 760, margin: "0 auto", paddingBottom: 60 }}>
+          <style>{`
+            @keyframes glowPulse {
+              0%,100% { box-shadow: 0 0 18px 4px rgba(0,200,100,0.35), 0 0 50px 10px rgba(0,200,100,0.12); }
+              50% { box-shadow: 0 0 32px 8px rgba(0,220,120,0.6), 0 0 80px 20px rgba(0,220,120,0.2); }
+            }
+            @keyframes cornerFlash {
+              0%,100% { opacity:1; } 50% { opacity:0.5; }
+            }
+            @keyframes fadeSlideUp {
+              from { opacity:0; transform:translateY(22px); }
+              to { opacity:1; transform:translateY(0); }
+            }
+            @keyframes scanBeam {
+              0% { opacity:1; box-shadow: 0 0 12px 5px #00ffaa; }
+              50% { opacity:0.7; box-shadow: 0 0 22px 10px #00ffaa; }
+              100% { opacity:1; box-shadow: 0 0 12px 5px #00ffaa; }
+            }
+            @keyframes particleFloat {
+              0% { transform: translateY(0) scale(1); opacity:0.7; }
+              100% { transform: translateY(-60px) scale(0.3); opacity:0; }
+            }
+
+            /* Responsive helpers for scanner */
+            .scanVideoBox { width: 300px; height: 300px; }
+            @media (max-width: 640px) {
+              .scanVideoBox { width: min(360px, 90vw); height: min(360px, 90vw); }
+              .mobileScanBar { position: fixed; left: 0; right: 0; bottom: 12px; display: flex; justify-content: center; z-index: 10000; }
+              .mobileScanBtn { width: calc(100% - 24px); max-width: 520px; padding: 14px 18px; border-radius: 14px; border: none; background: linear-gradient(135deg, #00c070, #00a060); color: #071A0E; font-weight: 900; font-size: 1rem; box-shadow: 0 8px 28px rgba(0,192,112,0.4); }
+            }
+          `}</style>
+
+          {/* Header */}
+          <div style={{ marginBottom: 32, display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 16,
+              background: "linear-gradient(135deg, #00c070, #0A2F1D)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 4px 20px rgba(0,192,112,0.35)"
+            }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="#FCD116" strokeWidth="2" style={{ width: 28, height: 28 }}>
+                <rect x="3" y="3" width="5" height="5" rx="1"/>
+                <rect x="16" y="3" width="5" height="5" rx="1"/>
+                <rect x="3" y="16" width="5" height="5" rx="1"/>
+                <path d="M21 16h-3v3"/><path d="M21 21h-5"/>
+                <path d="M12 3v5"/><path d="M12 12v3"/>
+                <path d="M3 12h5"/><path d="M12 12h5"/>
+              </svg>
+            </div>
+            <div>
+              <h2 style={{ fontSize: "1.5rem", fontWeight: 900, color: "#0A2F1D", margin: "0 0 4px 0", letterSpacing: "-0.5px" }}>
+                Scanner QR SafeTrip
+              </h2>
+              <p style={{ color: "#718096", fontSize: "0.85rem", margin: 0 }}>
+                Scannez billets de voyage et étiquettes de colis via la caméra
+              </p>
+            </div>
+          </div>
+
+          {/* Camera Modal Overlay */}
+          {cameraOpen && (
+            <div style={{
+              position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+              background: "rgba(0,0,0,0.97)", zIndex: 99999,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              backdropFilter: "blur(6px)"
+            }}>
+              {/* Hidden canvas for jsQR (Video uses the preview element) */}
+              <canvas ref={canvasRef} style={{ display: "none" }} />
+
+              {/* Top label */}
+              <div style={{ marginBottom: 24, textAlign: "center" }}>
+                <div style={{ fontSize: "0.7rem", color: "#00c070", fontWeight: 800, letterSpacing: 3, textTransform: "uppercase", marginBottom: 4 }}>
+                  ● SYSTÈME ACTIF
+                </div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#ffffff", letterSpacing: -0.5 }}>
+                  Pointez vers un QR Code SafeTrip
+                </div>
+              </div>
+
+              {cameraError ? (
+                <div style={{ textAlign: "center", color: "#ff6b6b", padding: "20px 30px", background: "rgba(255,100,100,0.1)", borderRadius: 16, border: "1px solid rgba(255,100,100,0.25)", maxWidth: 360 }}>
+                  <div style={{ fontSize: "2rem", marginBottom: 12 }}>📷</div>
+                  <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{cameraError}</div>
+                </div>
+              ) : (
+                <div className="scanVideoBox" style={{ position: "relative" }}>
+                  {/* Outer glow ring */}
+                  <div style={{
+                    position: "absolute", inset: -12, borderRadius: 28,
+                    animation: "glowPulse 2s ease-in-out infinite",
+                    background: "transparent"
+                  }} />
+
+                  {/* Video preview area (dark placeholder if no camera) */}
+                  <div style={{
+                    width: "100%", height: "100%", borderRadius: 18,
+                    background: "#0a0a0a", overflow: "hidden", position: "relative",
+                    border: "1px solid rgba(0,200,100,0.2)"
+                  }}>
+                    <video
+                      ref={videoRef}
+                      playsInline muted autoPlay
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                    {/* Scanning laser beam */}
+                    <div style={{
+                      position: "absolute", left: 0, right: 0,
+                      top: `${scanLinePos}%`,
+                      height: 3, borderRadius: 3,
+                      background: "linear-gradient(90deg, transparent, #00ffaa, #FCD116, #00ffaa, transparent)",
+                      animation: "scanBeam 1.2s ease-in-out infinite",
+                      zIndex: 10
+                    }} />
+                    {/* Dark overlay gradient sides */}
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, rgba(0,0,0,0.35) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.35) 100%)" }} />
+                  </div>
+
+                  {/* Corner brackets */}
+                  {[
+                    { top: 0, left: 0, borderRadius: "10px 0 0 0", borderTop: "3px solid #00ffaa", borderLeft: "3px solid #00ffaa" },
+                    { top: 0, right: 0, borderRadius: "0 10px 0 0", borderTop: "3px solid #00ffaa", borderRight: "3px solid #00ffaa" },
+                    { bottom: 0, left: 0, borderRadius: "0 0 0 10px", borderBottom: "3px solid #00ffaa", borderLeft: "3px solid #00ffaa" },
+                    { bottom: 0, right: 0, borderRadius: "0 0 10px 0", borderBottom: "3px solid #00ffaa", borderRight: "3px solid #00ffaa" },
+                  ].map((s, i) => (
+                    <div key={i} style={{
+                      position: "absolute", width: 32, height: 32,
+                      animation: "cornerFlash 1.8s ease-in-out infinite",
+                      animationDelay: `${i * 0.2}s`,
+                      ...s
+                    }} />
+                  ))}
+
+                  {/* Particle dots */}
+                  {[10, 40, 70, 90].map((left, i) => (
+                    <div key={i} style={{
+                      position: "absolute", bottom: 0, left: `${left}%`,
+                      width: 4, height: 4, borderRadius: "50%",
+                      background: "#00ffaa",
+                      animation: `particleFloat ${1.5 + i * 0.4}s ease-out infinite`,
+                      animationDelay: `${i * 0.3}s`,
+                      opacity: 0.8
+                    }} />
+                  ))}
+                </div>
+              )}
+
+              {/* Bottom controls */}
+              <div style={{ marginTop: 32, display: "flex", gap: 12, alignItems: "center", justifyContent: "center" }}>
+                <button
+                  onClick={closeCamera}
+                  style={{
+                    background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)",
+                    borderRadius: 12, padding: "12px 24px", fontWeight: 700, fontSize: "0.9rem",
+                    cursor: "pointer", fontFamily: "inherit"
+                  }}
+                >
+                  ✕ Fermer
+                </button>
+                <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", maxWidth: 260, textAlign: "center", lineHeight: 1.4 }}>
+                  La détection est automatique — maintenez le QR code dans le cadre
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main Scan Card */}
+          {!scanResult && (
+            <div style={{
+              background: "linear-gradient(145deg, #071A0E 0%, #0A2F1D 50%, #0d3825 100%)",
+              borderRadius: 24, padding: 40, border: "1px solid rgba(0,200,100,0.2)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05)",
+              marginBottom: 24, textAlign: "center", position: "relative", overflow: "hidden"
+            }}>
+              {/* Background grid */}
+              <div style={{
+                position: "absolute", inset: 0, opacity: 0.04,
+                backgroundImage: "linear-gradient(rgba(0,200,100,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,100,1) 1px, transparent 1px)",
+                backgroundSize: "40px 40px"
+              }} />
+
+              {/* QR Icon large */}
+              <div style={{ position: "relative", display: "inline-block", marginBottom: 28 }}>
+                <div style={{
+                  width: 120, height: 120, borderRadius: 28, margin: "0 auto",
+                  background: "rgba(0,200,100,0.08)", border: "2px solid rgba(0,200,100,0.25)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  boxShadow: "0 0 40px rgba(0,200,100,0.15)"
+                }}>
+                  <svg viewBox="0 0 100 100" fill="none" style={{ width: 64, height: 64 }}>
+                    <rect x="8" y="8" width="30" height="30" rx="4" stroke="#00c070" strokeWidth="5"/>
+                    <rect x="16" y="16" width="14" height="14" rx="2" fill="#FCD116"/>
+                    <rect x="62" y="8" width="30" height="30" rx="4" stroke="#00c070" strokeWidth="5"/>
+                    <rect x="70" y="16" width="14" height="14" rx="2" fill="#FCD116"/>
+                    <rect x="8" y="62" width="30" height="30" rx="4" stroke="#00c070" strokeWidth="5"/>
+                    <rect x="16" y="70" width="14" height="14" rx="2" fill="#FCD116"/>
+                    <line x1="62" y1="62" x2="100" y2="62" stroke="#00c070" strokeWidth="5"/>
+                    <line x1="62" y1="62" x2="62" y2="100" stroke="#00c070" strokeWidth="5"/>
+                    <line x1="80" y1="80" x2="100" y2="80" stroke="#FCD116" strokeWidth="5"/>
+                    <line x1="80" y1="80" x2="80" y2="100" stroke="#FCD116" strokeWidth="5"/>
+                  </svg>
+                </div>
+                {/* Pulse rings */}
+                <div style={{ position: "absolute", inset: -16, borderRadius: 44, border: "1.5px solid rgba(0,200,100,0.15)", animation: "glowPulse 2.5s ease-in-out infinite" }} />
+                <div style={{ position: "absolute", inset: -32, borderRadius: 60, border: "1px solid rgba(0,200,100,0.07)", animation: "glowPulse 2.5s ease-in-out infinite", animationDelay: "0.4s" }} />
+              </div>
+
+              <h3 style={{ color: "#ffffff", fontWeight: 900, fontSize: "1.25rem", margin: "0 0 8px 0" }}>
+                Scanner un Code QR
+              </h3>
+              <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.85rem", margin: "0 0 32px 0", lineHeight: 1.6, maxWidth: 380, display: "inline-block" }}>
+                Billets de voyage, étiquettes de colis et de bagages — détection instantanée par caméra
+              </p>
+
+              {/* Main camera scan button */}
+              <button
+                type="button"
+                onClick={openCamera}
+                style={{
+                  display: "block", width: "100%", maxWidth: 360, margin: "0 auto 16px",
+                  padding: "18px 28px", borderRadius: 16, border: "none",
+                  background: "linear-gradient(135deg, #00c070, #00a060)",
+                  color: "#071A0E", fontWeight: 900, fontSize: "1.05rem",
+                  cursor: "pointer", fontFamily: "inherit", letterSpacing: -0.3,
+                  boxShadow: "0 8px 28px rgba(0,192,112,0.4)",
+                  transition: "transform 0.15s, box-shadow 0.15s",
+                  position: "relative"
+                }}
+                onMouseEnter={e => { (e.target as any).style.transform = "translateY(-2px)"; (e.target as any).style.boxShadow = "0 12px 36px rgba(0,192,112,0.55)"; }}
+                onMouseLeave={e => { (e.target as any).style.transform = "translateY(0)"; (e.target as any).style.boxShadow = "0 8px 28px rgba(0,192,112,0.4)"; }}
+              >
+                <span style={{ marginRight: 10, fontSize: "1.1rem" }}>📷</span>
+                Scanner le Code QR
+              </button>
+
+              {/* Divider */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 360, margin: "0 auto 16px" }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
+                <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>ou coller</span>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
+              </div>
+
+              {/* Manual paste */}
+              <div style={{ maxWidth: 360, margin: "0 auto" }}>
+                <textarea
+                  ref={qrInputRef as any}
+                  value={qrInputValue}
+                  onChange={e => setQrInputValue(e.target.value)}
+                  placeholder={"Collez le texte du QR code ici...\nEx: SAFETRIP - BILLET DE VOYAGE\nRéf: TCK-..."}
+                  rows={4}
+                  style={{
+                    width: "100%", borderRadius: 14, border: "1.5px solid rgba(0,200,100,0.2)", padding: "14px",
+                    fontSize: "0.82rem", fontFamily: "monospace", resize: "none", outline: "none",
+                    color: "#e2e8f0", background: "rgba(255,255,255,0.04)", boxSizing: "border-box",
+                    lineHeight: 1.5
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = qrInputValue.trim();
+                    if (!text) return;
+                    const parsed = parseQrText(text);
+                    if (!parsed) { showToast("QR code non reconnu. Assurez-vous qu'il provient de SafeTrip.", false); return; }
+                    setScanResult(parsed);
+                    setScanNotifStatus("idle");
+                  }}
+                  style={{
+                    marginTop: 10, width: "100%", padding: "13px", borderRadius: 12, border: "1.5px solid rgba(0,200,100,0.35)",
+                    background: "transparent", color: "#00c070", fontWeight: 800, fontSize: "0.9rem",
+                    cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s"
+                  }}
+                >
+                  Analyser le contenu collé
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile floating scan button for quick access */}
+          {!cameraOpen && (
+            <div className="mobileScanBar" aria-hidden>
+              <button className="mobileScanBtn" onClick={openCamera}>
+                📷 Scanner le Code QR
+              </button>
+            </div>
+          )}
+
+          {/* Result Display */}
+          {scanResult && (
+            <div style={{ animation: "fadeSlideUp 0.4s ease-out" }}>
+              {/* Result header badge */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 10, height: 10, borderRadius: "50%", background: "#22c55e",
+                    boxShadow: "0 0 10px #22c55e"
+                  }} />
+                  <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#22c55e", textTransform: "uppercase", letterSpacing: 1 }}>
+                    QR Code Déchiffré — {scanResult.type === "colis" ? "Étiquette Colis" : "Billet de Voyage"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setScanResult(null); setQrInputValue(""); setScanNotifStatus("idle"); }}
+                  style={{ background: "none", border: "none", color: "#718096", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700 }}
+                >
+                  Nouveau scan ↩
+                </button>
+              </div>
+
+              {/* Main result card */}
+              <div style={{
+                background: scanResult.type === "colis"
+                  ? "linear-gradient(145deg, #071A0E, #0A2F1D, #004d2e)"
+                  : "linear-gradient(145deg, #0a0f2e, #101a50, #0d2260)",
+                borderRadius: 24, overflow: "hidden",
+                border: `1px solid ${scanResult.type === "colis" ? "rgba(0,200,100,0.25)" : "rgba(100,150,255,0.25)"}`,
+                boxShadow: `0 20px 60px ${scanResult.type === "colis" ? "rgba(0,100,60,0.35)" : "rgba(30,50,150,0.35)"}`,
+                marginBottom: 20
+              }}>
+                {/* Card top stripe */}
+                <div style={{
+                  height: 4,
+                  background: scanResult.type === "colis"
+                    ? "linear-gradient(90deg, #00c070, #FCD116, #00c070)"
+                    : "linear-gradient(90deg, #4169e1, #FCD116, #4169e1)"
+                }} />
+
+                <div style={{ padding: "28px 28px 24px" }}>
+                  {/* Type + ref */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24 }}>
+                    <div style={{
+                      width: 52, height: 52, borderRadius: 14,
+                      background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)",
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem",
+                      flexShrink: 0
+                    }}>
+                      {scanResult.type === "colis" ? "📦" : "🎫"}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "0.62rem", fontWeight: 800, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 3 }}>
+                        {scanResult.type === "colis" ? "ÉTIQUETTE COLIS / BAGAGE" : "BILLET DE VOYAGE"}
+                      </div>
+                      <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#FCD116", fontFamily: "monospace", letterSpacing: 0.5 }}>
+                        {scanResult.data["Réf"] || scanResult.data["Ref"] || "Réf. inconnue"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Data grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+                    {scanResult.type === "colis" ? (<>
+                      {/* Sender */}
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>📤 Expéditeur</div>
+                        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#fff" }}>
+                          {(() => {
+                            const lines = scanResult.rawText.split('\n');
+                            const idx = lines.findIndex(l => l.trim() === 'EXPÉDITEUR:');
+                            return idx > -1 ? lines.slice(idx + 1).find(l => l.startsWith('Nom:'))?.replace('Nom:', '').trim() : (scanResult.data["Nom"] || "N/A");
+                          })()}
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "#00c070", marginTop: 5, fontFamily: "monospace" }}>
+                          {(() => {
+                            const lines = scanResult.rawText.split('\n');
+                            const idx = lines.findIndex(l => l.trim() === 'EXPÉDITEUR:');
+                            return idx > -1 ? lines.slice(idx + 1).find(l => l.startsWith('Tél:'))?.replace('Tél:', '').trim() : "";
+                          })()}
+                        </div>
+                      </div>
+                      {/* Recipient */}
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>📥 Destinataire</div>
+                        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#fff" }}>
+                          {(() => {
+                            const lines = scanResult.rawText.split('\n');
+                            const idx = lines.findIndex(l => l.trim() === 'DESTINATAIRE:');
+                            return idx > -1 ? lines.slice(idx + 1).find(l => l.startsWith('Nom:'))?.replace('Nom:', '').trim() : "N/A";
+                          })()}
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "#00c070", marginTop: 5, fontFamily: "monospace" }}>
+                          {(() => {
+                            const lines = scanResult.rawText.split('\n');
+                            const idx = lines.findIndex(l => l.trim() === 'DESTINATAIRE:');
+                            return idx > -1 ? lines.slice(idx + 1).find(l => l.startsWith('Tél:'))?.replace('Tél:', '').trim() : "";
+                          })()}
+                        </div>
+                      </div>
+                      {/* Agency */}
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)", gridColumn: "span 2" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>🏢 Agence</div>
+                        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#FCD116" }}>{scanResult.data["Agence"] || selectedAgencyName}</div>
+                      </div>
+                    </>) : (<>
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👤 Passager</div>
+                        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#fff" }}>{scanResult.data["Nom"] || "N/A"}</div>
+                        <div style={{ fontSize: "0.78rem", color: "#00c070", marginTop: 5, fontFamily: "monospace" }}>{scanResult.data["Tél"] || ""}</div>
+                      </div>
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>💺 Siège</div>
+                        <div style={{ fontWeight: 900, fontSize: "2rem", color: "#FCD116", letterSpacing: -1 }}>{scanResult.data["Siège"] || "—"}</div>
+                      </div>
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)", gridColumn: "span 2" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>🗺️ Trajet</div>
+                        <div style={{ fontWeight: 900, fontSize: "1.05rem", color: "#fff" }}>{scanResult.data["De"] || "?"} → {scanResult.data["Vers"] || "?"}</div>
+                        <div style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.45)", marginTop: 4 }}>{scanResult.data["Date"] || ""} • Départ {scanResult.data["Départ"] || ""}</div>
+                      </div>
+                      <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "16px 18px", border: "1px solid rgba(255,255,255,0.06)", gridColumn: "span 2" }}>
+                        <div style={{ fontSize: "0.6rem", color: "rgba(255,255,255,0.35)", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>🏢 Agence</div>
+                        <div style={{ fontWeight: 800, fontSize: "0.95rem", color: "#FCD116" }}>{scanResult.data["Agence"] || selectedAgencyName}</div>
+                      </div>
+                    </>)}
+                  </div>
+
+                  {/* Action */}
+                  {scanResult.type === "colis" && (
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
+                      <p style={{ margin: "0 0 14px 0", fontSize: "0.82rem", color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>
+                        En confirmant, un <strong style={{ color: "rgba(255,255,255,0.8)" }}>email de livraison</strong> sera automatiquement envoyé à l'expéditeur et au destinataire.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={scanNotifStatus === "sending" || scanNotifStatus === "sent"}
+                        onClick={async () => {
+                          setScanNotifStatus("sending");
+                          try {
+                            const lines = scanResult.rawText.split('\n');
+                            const destIdx = lines.findIndex(l => l.trim() === 'DESTINATAIRE:');
+                            const senderIdx = lines.findIndex(l => l.trim() === 'EXPÉDITEUR:');
+                            const destNom = destIdx > -1 ? lines.slice(destIdx + 1).find(l => l.startsWith('Nom:'))?.replace('Nom:', '').trim() : null;
+                            const destTel = destIdx > -1 ? lines.slice(destIdx + 1).find(l => l.startsWith('Tél:'))?.replace('Tél:', '').trim() : null;
+                            const senderNom = senderIdx > -1 ? lines.slice(senderIdx + 1).find(l => l.startsWith('Nom:'))?.replace('Nom:', '').trim() : null;
+                            const senderTel = senderIdx > -1 ? lines.slice(senderIdx + 1).find(l => l.startsWith('Tél:'))?.replace('Tél:', '').trim() : null;
+                            const colisRef = scanResult.data["Réf"] || scanResult.data["Ref"] || "N/A";
+                            const agenceName = scanResult.data["Agence"] || selectedAgencyName;
+                            const res = await fetch(`${(typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'))}/api/agency/notify-delivery`, {
+                              method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+                              body: JSON.stringify({ colisRef, agenceName, senderName: senderNom, senderPhone: senderTel, recipientName: destNom, recipientPhone: destTel })
+                            });
+                            if (res.ok) {
+                              setScanNotifStatus("sent");
+                              showToast("✅ Livraison confirmée ! Notifications envoyées.");
+                              setColisState(prev => prev.map(c => c.id === colisRef || c.qrRef === colisRef ? { ...c, status: "Livré" as const } : c));
+                            } else { setScanNotifStatus("error"); showToast("Erreur lors des notifications.", false); }
+                          } catch { setScanNotifStatus("error"); showToast("Impossible de joindre le serveur.", false); }
+                        }}
+                        style={{
+                          width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                          fontWeight: 900, fontSize: "1rem", cursor: scanNotifStatus === "sent" ? "default" : "pointer",
+                          fontFamily: "inherit", transition: "all 0.3s ease", letterSpacing: -0.3,
+                          background: scanNotifStatus === "sent" ? "linear-gradient(135deg, #22c55e, #16a34a)" : scanNotifStatus === "sending" ? "rgba(255,255,255,0.1)" : "linear-gradient(135deg, #FCD116, #e6b800)",
+                          color: scanNotifStatus === "sent" ? "#fff" : "#071A0E",
+                          boxShadow: scanNotifStatus === "sent" ? "0 8px 28px rgba(34,197,94,0.35)" : scanNotifStatus === "idle" ? "0 8px 28px rgba(252,209,22,0.35)" : "none"
+                        }}
+                      >
+                        {scanNotifStatus === "idle" && "✅ Confirmer l'arrivée — Notifier l'expéditeur & destinataire"}
+                        {scanNotifStatus === "sending" && "⏳ Envoi des notifications en cours..."}
+                        {scanNotifStatus === "sent" && "✔️ Livraison confirmée — Notifications envoyées !"}
+                        {scanNotifStatus === "error" && "⚠️ Erreur — Cliquer pour réessayer"}
+                      </button>
+                    </div>
+                  )}
+
+                  {scanResult.type === "billet" && (
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const token = scanResult.data["Token"]; // New format preferred
+                            if (token) {
+                              setScanNotifStatus("sending");
+                              const res = await fetch(`${(typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'))}/api/agency/tickets/scan`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({ token })
+                              });
+                              const data = await res.json();
+                              if (res.ok && data.status === 'validated') {
+                                showToast(`✅ Billet validé. Passager ${data.passenger?.name || ''} embarqué !`);
+                                setScanResult(null);
+                                setQrInputValue("");
+                                setScanNotifStatus("sent");
+                              } else if (res.status === 409) {
+                                showToast(`⚠️ Ce billet a déjà été utilisé${data.scannedAt ? ` le ${new Date(data.scannedAt).toLocaleString('fr-FR')}` : ''}.`, false);
+                                setScanNotifStatus("error");
+                              } else {
+                                showToast(data.error || 'Validation du billet impossible.', false);
+                                setScanNotifStatus("error");
+                              }
+                            } else {
+                              // Backward compatibility: no token in QR
+                              showToast(`✅ Passager ${scanResult.data["Nom"] || ""} enregistré à bord !`);
+                              setScanResult(null);
+                              setQrInputValue("");
+                            }
+                          } catch (e) {
+                            showToast('Erreur réseau lors de la validation du billet.', false);
+                            setScanNotifStatus("error");
+                          }
+                        }}
+                        style={{
+                          width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                          fontWeight: 900, fontSize: "1rem", cursor: "pointer", fontFamily: "inherit",
+                          background: "linear-gradient(135deg, #FCD116, #e6b800)", color: "#071A0E",
+                          boxShadow: "0 8px 28px rgba(252,209,22,0.35)", letterSpacing: -0.3
+                        }}
+                      >
+        ✅ Valider l'embarquement du passager (scan unique)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

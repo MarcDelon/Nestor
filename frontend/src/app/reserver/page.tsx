@@ -4,6 +4,7 @@ import styles from "./page.module.css";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useUser } from "@/components/UserContext";
 
 interface Journey {
   id: number;
@@ -184,7 +185,8 @@ export default function Reserver() {
   const [hasSearched, setHasSearched] = useState(false);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [returnDate, setReturnDate] = useState("");
-  const [isAgencyLoggedIn, setIsAgencyLoggedIn] = useState(false);
+  const { user } = useUser();
+  const isAgencyLoggedIn = !!user && (user.role === "agency" || user.role === "admin");
   const [journeysState, setJourneysState] = useState<Journey[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -193,11 +195,6 @@ export default function Reserver() {
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
 
   useEffect(() => {
-    // 1. Sync connection status — check actual role, not obsolete key
-    const role = localStorage.getItem("safetrip_user_role");
-    const loggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    setIsAgencyLoggedIn(loggedIn && (role === "agency" || role === "admin"));
-
     // 2. Pre-fill search from URL params (from homepage search capsule)
     const depParam = searchParams.get("dep");
     const arrParam = searchParams.get("arr");
@@ -209,7 +206,7 @@ export default function Reserver() {
 
     // 3. Fetch journeys list from the actual database API (public route — no auth needed)
     const fetchJourneys = async () => {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+      const apiBase = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
       try {
         const response = await fetch(`${apiBase}/api/agency/journeys/all`);
         if (response.ok) {
@@ -915,7 +912,7 @@ export default function Reserver() {
                               <p>Départ de <strong>{j.depStation}</strong> à <strong>{j.depTime}</strong></p>
                             </div>
                             <button className={styles.confirmSelectionBtn} onClick={() => {
-                              localStorage.setItem("safetrip_booking_journey", JSON.stringify(j));
+                              sessionStorage.setItem("safetrip_booking_journey", JSON.stringify(j));
                               window.location.href = "/reserver/confirmer";
                             }}>
                               Confirmer la réservation

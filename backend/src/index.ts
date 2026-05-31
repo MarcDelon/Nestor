@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { supabase } from './config/supabase';
 import authRoutes from './routes/authRoutes';
@@ -12,9 +13,25 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Configuration des middlewares globaux
-app.use(cors());
+// CORS configuré pour autoriser l'envoi des cookies httpOnly depuis le frontend
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000,http://127.0.0.1:3000';
+const allowedOrigins = FRONTEND_ORIGIN.split(',').map(o => o.trim());
+const localDevRegex = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2\d|3[0-1])\.[0-9]{1,3}\.[0-9]{1,3})(:3000)?$/;
+const localTunnelRegex = /^https?:\/\/[a-z0-9-]+\.loca\.lt$/;
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin) || localDevRegex.test(origin) || localTunnelRegex.test(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Routes de l'API
 app.use('/api/auth', authRoutes);

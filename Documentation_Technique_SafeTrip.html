@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Dossier Technique – SafeTrip</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --green:#00673C; --gold:#FCD116; --ink:#0A2F1D; --muted:#6b7280; --border:#e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; font-family: Inter, Segoe UI, Roboto, Arial, sans-serif; color: #111827; }
+    body { line-height: 1.55; }
+    .page { max-width: 1024px; margin: 0 auto; padding: 40px 28px; }
+    header.cover { padding: 56px 0 36px; border-bottom: 3px solid var(--green); }
+    .title { font-size: 32px; font-weight: 900; color: var(--ink); margin: 0 0 8px; letter-spacing: .3px; }
+    .subtitle { font-size: 18px; color: #374151; margin: 0 0 10px; }
+    .meta { font-size: 13px; color: var(--muted); }
+    h2 { margin: 28px 0 12px; font-size: 22px; color: var(--ink); border-left: 6px solid var(--gold); padding-left: 10px; }
+    h3 { margin: 22px 0 10px; font-size: 18px; color: #0f172a; }
+    p { margin: 10px 0; }
+    ul { margin: 8px 0 10px 20px; }
+    li { margin: 4px 0; }
+    code, .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #f8fafc; padding: 1px 6px; border-radius: 6px; border: 1px solid #eef2f7; }
+    .note { padding: 10px 12px; background: #f8fafc; border: 1px dashed var(--border); border-radius: 8px; color: #374151; }
+    .kbd { border: 1px solid #cbd5e1; padding: 2px 6px; border-radius: 6px; background: #f1f5f9; font-family: monospace; font-size: 90%; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chip { display: inline-block; padding: 2px 8px; background: #f1f5f9; border-radius: 999px; border:1px solid #e2e8f0; font-size: 12px; color:#334155; margin-right:6px; }
+    .toc { padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #ffffff; }
+    .toc a { color: var(--green); text-decoration: none; }
+    .bq { border-left: 4px solid var(--green); padding-left: 12px; color:#334155; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 18px; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; font-size: 14px; }
+    th { background: #f8fafc; }
+    /* Print to PDF */
+    @media print {
+      a[href]:after { content: ""; }
+      .page { padding: 24px 18px; }
+      header.cover { border: 0; padding-bottom: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="cover">
+      <h1 class="title">Dossier Technique – SafeTrip</h1>
+      <p class="subtitle">Architecture, choix techniques, déploiement (Vercel), collaboration (GitHub)</p>
+      <div class="meta">Version: 1.0 • Date: 31/05/2026</div>
+      <div style="margin-top:10px">
+        <span class="chip">Next.js</span>
+        <span class="chip">TypeScript</span>
+        <span class="chip">CSS Modules</span>
+        <span class="chip">next-intl</span>
+        <span class="chip">jsQR</span>
+        <span class="chip">Express</span>
+        <span class="chip">Supabase (PostgreSQL)</span>
+        <span class="chip">Vercel</span>
+        <span class="chip">GitHub</span>
+      </div>
+    </header>
+
+    <section>
+      <h2 id="sommaire">Sommaire</h2>
+      <div class="toc">
+        <ol>
+          <li><a href="#apercu">Aperçu du projet</a></li>
+          <li><a href="#architecture">Architecture & flux</a></li>
+          <li><a href="#stack">Outils & Technologies (définition, pourquoi, alternatives)</a></li>
+          <li><a href="#frontend">Frontend (Next.js)</a></li>
+          <li><a href="#backend">Backend (Express)</a></li>
+          <li><a href="#database">Base de données (Supabase/PostgreSQL)</a></li>
+          <li><a href="#messagerie">Messagerie & Statuts de lecture</a></li>
+          <li><a href="#qr">Scan QR & Traçabilité</a></li>
+          <li><a href="#hebergement">Hébergement Vercel & Backend</a></li>
+          <li><a href="#github">Collaboration GitHub & CI/CD</a></li>
+          <li><a href="#securite">Sécurité, Performance, Observabilité</a></li>
+          <li><a href="#tests">Tests & Qualité</a></li>
+          <li><a href="#deploiement">Checklist de déploiement</a></li>
+          <li><a href="#roadmap">Améliorations futures</a></li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <h2 id="apercu">1) Aperçu du projet</h2>
+      <p>SafeTrip est une application web pour voyageurs et agences: réservation, suivi colis/bagages, messagerie agence–client, et scan QR pour billets/étiquettes. L’interface est responsive et multilingue.</p>
+      <ul>
+        <li>Frontend: Next.js (React, TypeScript), CSS Modules, next-intl.</li>
+        <li>Backend: Express (TypeScript), endpoints REST.</li>
+        <li>Base: Supabase (PostgreSQL managé).</li>
+        <li>Déploiement: Vercel (frontend). Collaboration: GitHub.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="architecture">2) Architecture & flux</h2>
+      <div class="bq">
+        <p><strong>Diagramme (vue logique)</strong></p>
+        <pre>
+[ Client (Next.js) ]  ←→  [ API Express ]  ←→  [ Supabase (PostgreSQL) ]
+       ↑   |   fetch/polling           | SQL / RPC / Auth
+       |   ↓                          
+   Caméra (getUserMedia)               
+   jsQR (décodage)                     
+        </pre>
+      </div>
+      <p><strong>Flux typiques</strong></p>
+      <ul>
+        <li><em>Messagerie</em>: le client envoie un message → API Express → enregistrement Postgres → polling côté client (3s) + marquage lu.</li>
+        <li><em>Scan QR</em>: la caméra (getUserMedia) capture une frame → jsQR décode → affichage + actions (ex: notification de livraison).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="stack">3) Outils & Technologies</h2>
+      <h3>Frontend</h3>
+      <ul>
+        <li><strong>Next.js</strong> – Framework React (SSR/SSG, App Router). <em>Pourquoi:</em> perfs, SEO, intégration native Vercel. <em>Alternatives:</em> Gatsby, Remix, CRA (déconseillé).</li>
+        <li><strong>TypeScript</strong> – Typage statique. <em>Pourquoi:</em> sécurité, refactoring. <em>Alt.:</em> JS pur (moins sûr), Flow (peu adopté).</li>
+        <li><strong>CSS Modules</strong> – Styles scopés. <em>Pourquoi:</em> simple, zéro runtime. <em>Alt.:</em> Tailwind (utilitaires), CSS-in-JS.</li>
+        <li><strong>next-intl</strong> – i18n côté Next. <em>Pourquoi:</em> App Router friendly. <em>Alt.:</em> i18next/react-intl.</li>
+        <li><strong>jsQR + getUserMedia + Canvas</strong> – Décodage QR en local. <em>Pourquoi:</em> léger, sans serveur vision. <em>Alt.:</em> ZXing, backends ML.</li>
+      </ul>
+      <h3>Backend</h3>
+      <ul>
+        <li><strong>Express (TypeScript)</strong> – Micro‑framework HTTP. <em>Pourquoi:</em> léger, connu. <em>Alt.:</em> NestJS (opinionné), Fastify (performant).</li>
+        <li><strong>Supabase (PostgreSQL)</strong> – BaaS SQL. <em>Pourquoi:</em> SQL robuste, hébergé, intégrations. <em>Alt.:</em> Firebase (NoSQL), PlanetScale (MySQL), MongoDB.</li>
+      </ul>
+      <h3>Collaboration & Hébergement</h3>
+      <ul>
+        <li><strong>GitHub</strong> – Hébergement code, PR, Issues, Projects. <em>Pourquoi:</em> standard, intégration Vercel.</li>
+        <li><strong>Vercel</strong> – Hébergement frontend Next. <em>Pourquoi:</em> DX, CDN, prévisualisations PR. <em>Alt.:</em> Netlify.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="frontend">4) Frontend (Next.js)</h2>
+      <ul>
+        <li>Routage App Router; pages clients/agences (dashboards), composant de messagerie, scanner QR.</li>
+        <li>Styles en <em>CSS Modules</em> pour encapsulation et cohérence.</li>
+        <li>i18n via <em>next-intl</em>.</li>
+        <li><strong>Messagerie</strong>: affichage threads, polling 3s (configurable), marquage lu.</li>
+        <li><strong>Réponse à un message</strong>: aperçu « Réponse à … » avec <code>reply_to_id</code>/<code>reply_to_text</code>.</li>
+        <li><strong>UX Mobile</strong>: boutons et zones tactiles agrandies, composants responsives.</li>
+      </ul>
+      <p class="note">Astuce PDF: ouvrez ce fichier dans un navigateur, puis <span class="kbd">Ctrl</span>+<span class="kbd">P</span> → « Enregistrer au format PDF ».</p>
+    </section>
+
+    <section>
+      <h2 id="backend">5) Backend (Express)</h2>
+      <p><strong>Routes (extraits – module agence)</strong></p>
+      <table>
+        <thead><tr><th>Méthode</th><th>Route</th><th>But</th></tr></thead>
+        <tbody>
+          <tr><td>GET</td><td>/api/agency/agencies</td><td>Liste d’agences</td></tr>
+          <tr><td>GET</td><td>/api/agency/journeys, /journeys/all</td><td>Trajets</td></tr>
+          <tr><td>GET</td><td>/api/agency/buses, /buses/all</td><td>Bus</td></tr>
+          <tr><td>GET</td><td>/api/agency/journeys/:journeyId/occupied-seats</td><td>Sièges occupés</td></tr>
+          <tr><td>POST</td><td>/api/agency/journeys</td><td>Créer trajet</td></tr>
+          <tr><td>DELETE</td><td>/api/agency/journeys/:id</td><td>Supprimer trajet</td></tr>
+          <tr><td>GET</td><td>/api/agency/passengers/:journeyId</td><td>Passagers</td></tr>
+          <tr><td>PUT</td><td>/api/agency/passengers/:journeyId/checkin/:passengerId</td><td>Check-in</td></tr>
+          <tr><td>PUT</td><td>/api/agency/passengers/:journeyId/scan/:passengerId</td><td>Scan bagage</td></tr>
+          <tr><td>GET</td><td>/api/agency/colis</td><td>Colis</td></tr>
+          <tr><td>PUT</td><td>/api/agency/colis/:colisId/scan</td><td>Statut colis</td></tr>
+          <tr><td>POST</td><td>/api/agency/notify-delivery</td><td>Notifier livraison</td></tr>
+          <tr><td>GET</td><td>/api/agency/messages/:threadId</td><td>Récupérer messages</td></tr>
+          <tr><td>POST</td><td>/api/agency/messages/:threadId</td><td>Envoyer message</td></tr>
+          <tr><td>PUT</td><td>/api/agency/messages/:threadId/read</td><td>Marquer comme lu</td></tr>
+          <tr><td>PUT</td><td>/api/agency/messages/:t/:m</td><td>Modifier message</td></tr>
+          <tr><td>DELETE</td><td>/api/agency/messages/:t/:m</td><td>Supprimer message</td></tr>
+          <tr><td>GET</td><td>/api/agency/profile</td><td>Profil agence</td></tr>
+          <tr><td>PUT</td><td>/api/agency/profile</td><td>Maj profil</td></tr>
+        </tbody>
+      </table>
+      <p>Auth par middleware <code>requireAuth</code> sur routes sensibles.</p>
+    </section>
+
+    <section>
+      <h2 id="database">6) Base de données (Supabase/PostgreSQL)</h2>
+      <p><strong>Table messages</strong> (extraits):</p>
+      <ul>
+        <li><code>id</code> (PK), <code>agency_id</code>, <code>thread_id</code>, <code>sender</code> ('agency'|'contact')</li>
+        <li><code>text</code>, <code>time</code>, <code>is_read</code> (bool)</li>
+        <li><code>reply_to_id</code> (int, optionnel), <code>reply_to_text</code> (text, optionnel)</li>
+        <li><code>created_at</code> (timestamp)</li>
+      </ul>
+      <p>Migrations fournies (schema.sql + migrations/*). Certaines tables désactivent RLS selon besoins.</p>
+    </section>
+
+    <section>
+      <h2 id="messagerie">7) Messagerie & Statuts</h2>
+      <ul>
+        <li>Polling (≈3s) pour récupérer les messages d’un thread.</li>
+        <li>Marquage « lu » via <code>PUT /messages/:threadId/read</code>.</li>
+        <li>Édition/Suppression possibles (côté auteur; confirmation contextuelle).</li>
+        <li>Réponses: les champs <code>reply_to_id</code>/<code>reply_to_text</code> pilotent l’aperçu « Réponse à … ».</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="qr">8) Scan QR & Traçabilité</h2>
+      <ul>
+        <li>Caméra: <code>navigator.mediaDevices.getUserMedia</code> (mobile → nécessite HTTPS ou localhost).</li>
+        <li>Décodage: <strong>jsQR</strong> à partir d’une frame Canvas.</li>
+        <li>UI: aperçu, animation ligne de scan, actions (ex: notifier livraison).</li>
+      </ul>
+      <p class="note"><strong>Important mobile:</strong> sur IP locale en HTTP, l’accès caméra est souvent bloqué. Utiliser HTTPS (Vercel) ou un tunnel (ngrok/Cloudflare) pour tester sur téléphone.</p>
+    </section>
+
+    <section>
+      <h2 id="hebergement">9) Hébergement (Vercel) & Backend</h2>
+      <h3>Frontend – Vercel</h3>
+      <ol>
+        <li>Connecter le repo GitHub → Importer le projet (dossier frontend s’il est séparé).</li>
+        <li>Définir les variables d’env.: <code>NEXT_PUBLIC_API_URL</code> (pointe vers l’API), i18n si besoin.</li>
+        <li>Build par défaut Next.js → déploiement auto (Preview sur PR, Production sur merge).</li>
+      </ol>
+      <h3>Backend – options</h3>
+      <ul>
+        <li>Service Express: Render, Railway, Fly.io (simples et économiques).</li>
+        <li>Alternative: Serverless Functions (Vercel/Cloudflare) après adaptation des routes.</li>
+        <li>Base: Supabase gère PostgreSQL + Auth + Stockage (déjà en place).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="github">10) Collaboration GitHub & CI/CD</h2>
+      <ul>
+        <li>Branches: <code>main</code> (stable), <code>feature/*</code> (développement), <code>hotfix/*</code>.</li>
+        <li>PRs: relectures, prévisualisations Vercel automatiques.</li>
+        <li>Issues/Projects: suivi tâches et Roadmap.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="securite">11) Sécurité, Performance, Observabilité</h2>
+      <ul>
+        <li>HTTPS, CORS, validation d’entrée, <em>requireAuth</em> sur endpoints sensibles.</li>
+        <li>Perfs: SSR Next, code splitting, images optimisées, caches.</li>
+        <li>Observabilité: logs serveur; recommandation Sentry/Logtail pour prod.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="tests">12) Tests & Qualité</h2>
+      <ul>
+        <li>Unitaires (utils, mappages), intégration (routes clés).</li>
+        <li>E2E (Playwright/Cypress) pour parcours critiques (messagerie, scan).</li>
+        <li>Lint/Format (ESLint/Prettier) – recommandés.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="deploiement">13) Checklist de déploiement</h2>
+      <ul>
+        <li>Supabase: exécuter les migrations DB (schema.sql + migrations/..).</li>
+        <li>API: déployer Express, récupérer l’URL publique.</li>
+        <li>Frontend: Vercel relié au repo; configurer <code>NEXT_PUBLIC_API_URL</code>.</li>
+        <li>Tests de fumée: chargement pages, login, messagerie, scan (en HTTPS).</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 id="roadmap">14) Améliorations futures</h2>
+      <ul>
+        <li>Passage à WebSockets/Server-Sent Events pour chat temps réel fort.</li>
+        <li>Télémétrie centralisée (Sentry) + dashboards perfs (Web Vitals).</li>
+        <li>Automatisation CI (lint/test/build) obligatoire avant merge.</li>
+        <li>Accessibilité renforcée (mix ARIA, focus states, contrastes).</li>
+      </ul>
+    </section>
+
+  </div>
+</body>
+</html>

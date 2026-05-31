@@ -5,6 +5,9 @@ import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useUser } from "@/components/UserContext";
 
 const agencies = [
   { name: 'Finexs', image: '/images/finexs.png' },
@@ -26,6 +29,8 @@ const teamSlides = [
 
 export default function Home() {
   const router = useRouter();
+  const t = useTranslations("Home");
+  const tc = useTranslations("Common");
   const [scrolled, setScrolled] = useState(false);
   const [searchDep, setSearchDep] = useState("");
   const [searchArr, setSearchArr] = useState("");
@@ -40,19 +45,9 @@ export default function Home() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isAgencyLoggedIn, setIsAgencyLoggedIn] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
-
-  useEffect(() => {
-    const status = localStorage.getItem("safetrip_agency_logged_in") === "true";
-    setIsAgencyLoggedIn(status);
-
-    const loggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    const role = localStorage.getItem("safetrip_user_role");
-    setIsLoggedIn(loggedIn);
-    setUserRole(role);
-  }, []);
+  const { user } = useUser();
+  const isLoggedIn = !!user;
+  const userRole = user?.role || null;
 
   const toggleConnection = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -216,7 +211,7 @@ export default function Home() {
   };
 
   const formatDateDisplay = (dateString: string) => {
-    if (!dateString) return "Choisir une date";
+    if (!dateString) return t("clear");
     const [year, month, day] = dateString.split("-");
     const monthNamesShort = ["Janv.", "Févr.", "Mars", "Avril", "Mai", "Juin", "Juil.", "Août", "Sept.", "Oct.", "Nov.", "Déc."];
     return `${day} ${monthNamesShort[parseInt(month, 10) - 1]} ${year}`;
@@ -288,27 +283,27 @@ export default function Home() {
           })}
         </div>
         <div className={styles.calendarFooter}>
-          <button 
-            type="button" 
-            className={styles.calendarFooterBtn} 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              if (isDep) { setDepartureDate(""); } 
-              else { setReturnDate(""); } 
+          <button
+            type="button"
+            className={styles.calendarFooterBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isDep) { setDepartureDate(""); }
+              else { setReturnDate(""); }
               setActiveDropdown(null);
             }}
           >
-            Effacer
+            {t("clear")}
           </button>
-          <button 
-            type="button" 
-            className={styles.calendarFooterBtn} 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              selectDate(isDep, todayYear, todayMonth, todayDay); 
+          <button
+            type="button"
+            className={styles.calendarFooterBtn}
+            onClick={(e) => {
+              e.stopPropagation();
+              selectDate(isDep, todayYear, todayMonth, todayDay);
             }}
           >
-            Aujourd'hui
+            {t("today")}
           </button>
         </div>
       </div>
@@ -324,19 +319,19 @@ export default function Home() {
       <div className={`${styles.searchCapsuleContainer} ${isHeader ? styles.headerSearchVersion : ""}`}>
         {/* Trip Type Selector */}
         <div className={styles.tripTypeSelector}>
-          <button 
+          <button
             type="button"
             className={`${styles.tripTypeTab} ${!isRoundTrip ? styles.tripTypeTabActive : ""}`}
             onClick={(e) => { e.stopPropagation(); setIsRoundTrip(false); }}
           >
-            Aller simple
+            {t("oneWay")}
           </button>
-          <button 
+          <button
             type="button"
             className={`${styles.tripTypeTab} ${isRoundTrip ? styles.tripTypeTabActive : ""}`}
             onClick={(e) => { e.stopPropagation(); setIsRoundTrip(true); }}
           >
-            Aller-retour
+            {t("roundTrip")}
           </button>
         </div>
 
@@ -349,7 +344,7 @@ export default function Home() {
             </svg>
             <input
               type="text"
-              placeholder="Départ"
+              placeholder={t("departure")}
               className={styles.capsuleInput}
               value={searchDep}
               onChange={e => setSearchDep(e.target.value)}
@@ -364,7 +359,7 @@ export default function Home() {
             </svg>
             <input
               type="text"
-              placeholder="Destination"
+              placeholder={t("destination")}
               className={styles.capsuleInput}
               value={searchArr}
               onChange={e => setSearchArr(e.target.value)}
@@ -381,7 +376,7 @@ export default function Home() {
               <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
             <div className={styles.capsuleValueDisplay}>
-              {departureDate ? formatDateDisplay(departureDate) : "Aujourd'hui"}
+              {departureDate ? formatDateDisplay(departureDate) : t("today")}
             </div>
             {activeDropdown === depKey && renderCalendar(true, depKey)}
           </div>
@@ -395,7 +390,7 @@ export default function Home() {
               <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
             <div className={styles.capsuleValueDisplay}>
-              {returnDate ? formatDateDisplay(returnDate) : "Date de retour"}
+              {returnDate ? formatDateDisplay(returnDate) : t("returnDate")}
             </div>
             {activeDropdown === retKey && renderCalendar(false, retKey)}
           </div>
@@ -408,16 +403,16 @@ export default function Home() {
             </svg>
             <div className={styles.capsulePassengerInfo}>
               <div className={styles.capsulePassengerTitle}>
-                {passengers} {passengers > 1 ? "passagers" : "passager"}
+                {passengers} {passengers > 1 ? t("passengers") : t("passenger")}
               </div>
               <div className={styles.capsulePassengerSubtitle}>
-                Aucune réduction
+                {t("noDiscount")}
               </div>
             </div>
 
             {activeDropdown === passKey && (
               <div className={styles.passengerPopover} onClick={(e) => e.stopPropagation()}>
-                <div className={styles.popoverTitle}>Nombre de places</div>
+                <div className={styles.popoverTitle}>{t("seatCount")}</div>
                 <div className={styles.popoverCounterRow}>
                   <button 
                     type="button"
@@ -453,7 +448,7 @@ export default function Home() {
               router.push(`/reserver${params.toString() ? `?${params.toString()}` : ""}`);
             }}
           >
-            Rechercher
+            {tc("search")}
           </button>
         </div>
       </div>
@@ -493,7 +488,7 @@ export default function Home() {
           }
         });
       },
-      { threshold: 0.1, rootMargin: "0px 0px -60px 0px" }
+      { threshold: 0, rootMargin: "0px" }
     );
 
     const revealElements = document.querySelectorAll(
@@ -508,9 +503,9 @@ export default function Home() {
   }, []);
 
   return (
-    <>
+    <main className={styles.main}>
       {/* Header */}
-      <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""} ${scrolled ? styles.headerScrolled : ""}`}>
+      <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""}`}>
         <div className={styles.headerContent}>
           <div className={styles.logoContainer}>
             <img 
@@ -520,31 +515,26 @@ export default function Home() {
             />
           </div>
           <nav className={styles.nav}>
-            <Link href="/reserver">Réserver</Link>
-            <Link href="/agences">Agences</Link>
-            <Link href="/tracabilite">Traçabilité</Link>
-            <Link href="/location">Location</Link>
-            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
-            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Agence</Link>}
-            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Espace Voyageur</Link>}
+            <Link href="/reserver">{tc("reserve")}</Link>
+            <Link href="/agences">{tc("agencies")}</Link>
+            <Link href="/tracabilite">{tc("traceability")}</Link>
+            <Link href="/location">{tc("rental")}</Link>
+            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("admin")}</Link>}
+            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("myAgency")}</Link>}
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("travelerSpace")}</Link>}
           </nav>
+          <LanguageToggle />
           <button onClick={toggleConnection} className={styles.headerBtn}>
-            {!isLoggedIn ? (
-              "Connexion"
-            ) : userRole === "admin" ? (
-              "Admin"
-            ) : userRole === "agency" ? (
-              "Mon Agence"
-            ) : (
-              "Mon Espace"
-            )}
+            {!isLoggedIn ? tc("login") : userRole === "admin" ? tc("admin") : userRole === "agency" ? tc("myAgency") : tc("mySpace")}
           </button>
           <button
             className={styles.hamburgerBtn}
             aria-label="Menu"
-            onClick={() => setMobileMenuOpen(o => !o)}
+            aria-expanded={mobileMenuOpen}
+            onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(o => !o); }}
+            type="button"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:24,height:24}}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:24,height:24,pointerEvents:'none'}}>
               <line x1="3" y1="6" x2="21" y2="6"/>
               <line x1="3" y1="12" x2="21" y2="12"/>
               <line x1="3" y1="18" x2="21" y2="18"/>
@@ -553,18 +543,21 @@ export default function Home() {
         </div>
 
         {mobileMenuOpen && (
-          <div className={styles.mobileMenu}>
-            <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>Réserver</Link>
-            <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>Agences</Link>
-            <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>Traçabilité</Link>
-            <Link href="/location" onClick={() => setMobileMenuOpen(false)}>Location</Link>
-            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>Admin</Link>}
-            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>Agence</Link>}
-            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>Mon espace</Link>}
+          <>
+          <div className={styles.mobileMenuBackdrop} onClick={() => setMobileMenuOpen(false)} />
+          <div className={styles.mobileMenu} role="menu">
+            <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
+            <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
+            <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
+            <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("admin")}</Link>}
+            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("myAgency")}</Link>}
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("mySpace")}</Link>}
             <button onClick={() => { toggleConnection(new MouseEvent('click') as any); setMobileMenuOpen(false); }} style={{background:"#00673C",color:"#fff",fontWeight:700,padding:"10px 20px",borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
-              {!isLoggedIn ? "Connexion" : "Mon compte"}
+              {!isLoggedIn ? tc("login") : tc("myAccount")}
             </button>
           </div>
+          </>
         )}
 
         {/* Sticky Search Bar (BlaBlaCar style) */}
@@ -576,7 +569,6 @@ export default function Home() {
           </div>
         )}
       </header>
-      <main className={styles.main}>
 
       {/* Hero Section */}
       <section className={styles.hero}>
@@ -584,15 +576,14 @@ export default function Home() {
           {/* Left Column: Bold Tagline and Subtitle */}
           <div className={styles.heroTextColumn}>
             <h1 className={styles.heroTitle}>
-              Bus, agences, traçabilité : SafeTrip vous emmène où vous voulez.<img 
+              {t("heroTitle")}<img
                 src="/images/logo-removebg-preview (2).png" 
                 alt="SafeTrip Logo" 
                 className={styles.heroTitleLogo} 
               />
             </h1>
             <p className={styles.heroSubtitle}>
-              Trouvez des billets de bus à petits prix pour votre prochain voyage.<br />
-              Comparez et réservez votre prochain trajet en un clin d'œil avec SafeTrip.
+              {t("heroSubtitle")}
             </p>
           </div>
 
@@ -608,7 +599,7 @@ export default function Home() {
                 poster="/bus.png"
               >
                 <source src="/bus-video.mp4" type="video/mp4" />
-                Votre navigateur ne supporte pas la lecture de cette vidéo.
+                {t("videoFallback")}
               </video>
             </div>
 
@@ -623,7 +614,7 @@ export default function Home() {
                         <circle cx="12" cy="12" r="10"></circle>
                         <polyline points="12 6 12 12 16 14"></polyline>
                       </svg>
-                      <span className={styles.cardHeaderTitle}>HEURE {citiesWeather[cityIdx].city.toUpperCase()}</span>
+                      <span className={styles.cardHeaderTitle}>{t("timeLabel")} {citiesWeather[cityIdx].city.toUpperCase()}</span>
                     </div>
                   </div>
                   
@@ -632,7 +623,7 @@ export default function Home() {
                   </div>
                   
                   <div className={styles.cardFooterRow}>
-                    <span className={styles.cardFooterText}>Cameroun</span>
+                    <span className={styles.cardFooterText}>{t("cameroonLabel")}</span>
                     <div className={styles.cardIndicators}>
                       <span className={`${styles.cardIndicatorDot} ${styles.cardIndicatorActive}`}></span>
                       <span className={styles.cardIndicatorDot}></span>
@@ -648,7 +639,7 @@ export default function Home() {
                         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                         <circle cx="12" cy="10" r="3"></circle>
                       </svg>
-                      <span className={styles.cardHeaderTitle}>MÉTÉO {citiesWeather[cityIdx].city.toUpperCase()}</span>
+                      <span className={styles.cardHeaderTitle}>{t("weatherLabel")} {citiesWeather[cityIdx].city.toUpperCase()}</span>
                     </div>
                     {/* Render cloud or sun based on description */}
                     <div className={styles.cardWeatherIconBox}>
@@ -696,7 +687,7 @@ export default function Home() {
 
         {/* Scroll Down Indicator */}
         <div className={`${styles.scrollDown} ${scrolled ? styles.hidden : ""}`} onClick={() => document.getElementById('agences')?.scrollIntoView({ behavior: 'smooth' })}>
-          <span className={styles.scrollText}>Défiler</span>
+          <span className={styles.scrollText}>{t("scrollDown")}</span>
           <div className={styles.mouse}>
             <div className={styles.wheel}></div>
           </div>
@@ -706,7 +697,7 @@ export default function Home() {
       {/* Agencies Section */}
       <section id="agences" className={`${styles.agenciesSection} ${styles.reveal}`}>
         <div className="container">
-          <h2 className={styles.sectionTitle}>Nos Agences Partenaires</h2>
+          <h2 className={styles.sectionTitle}>{t("partnerAgencies")}</h2>
           <div className={styles.marqueeContainer}>
             <div className={styles.marqueeTrack}>
               {[...agencies, ...agencies].map((agency, index) => (
@@ -771,27 +762,23 @@ export default function Home() {
           
           {/* Right Column: Text & Stats */}
           <div className={`${styles.aboutTextColumn} ${styles.revealRight}`}>
-            <span className={styles.aboutSectionBadge}>QUI SOMMES-NOUS ?</span>
-            <h2 className={styles.aboutTitle}>Une équipe passionnée au service de votre mobilité</h2>
-            <p className={styles.aboutDescription}>
-              Chez <strong>SafeTrip</strong>, notre mission est de révolutionner le transport routier au Cameroun et en Afrique. Nous sommes une équipe de professionnels passionnés de technologie et de logistique, unis par une vision commune : rendre vos voyages plus simples, plus sûrs et 100% transparents.
-            </p>
-            <p className={styles.aboutDescription}>
-              En collaborant avec les plus grandes agences de transport du pays, nous regroupons toutes les offres sur une marketplace unique pour vous éviter les files d'attente. De plus, notre innovation exclusive de traçabilité par QR code garantit que vos bagages et colis arrivent à destination en toute sérénité.
-            </p>
+            <span className={styles.aboutSectionBadge}>{t("aboutBadge")}</span>
+            <h2 className={styles.aboutTitle}>{t("aboutTitle")}</h2>
+            <p className={styles.aboutDescription}>{t("aboutDesc1")}</p>
+            <p className={styles.aboutDescription}>{t("aboutDesc2")}</p>
             
             <div className={styles.aboutStatsGrid}>
               <div className={styles.statCard}>
                 <h4 className={styles.statVal}>50k+</h4>
-                <p className={styles.statLbl}>Voyageurs satisfaits</p>
+                <p className={styles.statLbl}>{t("statSatisfied")}</p>
               </div>
               <div className={styles.statCard}>
                 <h4 className={styles.statVal}>15+</h4>
-                <p className={styles.statLbl}>Agences partenaires</p>
+                <p className={styles.statLbl}>{t("statPartners")}</p>
               </div>
               <div className={styles.statCard}>
                 <h4 className={styles.statVal}>24/7</h4>
-                <p className={styles.statLbl}>Support & Assistance</p>
+                <p className={styles.statLbl}>{t("statSupport")}</p>
               </div>
             </div>
           </div>
@@ -803,11 +790,9 @@ export default function Home() {
         <div className={`container ${styles.traceabilityContent}`}>
           {/* Left Column: Premium Feature Cards */}
           <div className={`${styles.traceabilityText} ${styles.revealLeft}`}>
-            <span className={styles.traceabilityBadge}>SUIVI & SÉCURITÉ</span>
-            <h2 className={styles.traceabilityTitle}>Traçabilité 100% Numérique</h2>
-            <p className={styles.traceabilityDescription}>
-              Ne perdez plus jamais la trace de vos bagages ou de vos colis. Grâce à notre système innovant de QR code, suivez chaque étape de leur parcours en temps réel sur votre smartphone.
-            </p>
+            <span className={styles.traceabilityBadge}>{t("tracBadge")}</span>
+            <h2 className={styles.traceabilityTitle}>{t("tracTitle")}</h2>
+            <p className={styles.traceabilityDescription}>{t("tracDesc")}</p>
             
             <div className={styles.traceabilityFeatureList}>
               <div className={styles.traceabilityFeatureItem}>
@@ -817,8 +802,8 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4>Génération de QR code unique</h4>
-                  <p>Chaque bagage et colis reçoit une étiquette unique dès son enregistrement à l'agence.</p>
+                  <h4>{t("tracFeature1Title")}</h4>
+                  <p>{t("tracFeature1Desc")}</p>
                 </div>
               </div>
 
@@ -829,8 +814,8 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4>Alertes SMS & Email en temps réel</h4>
-                  <p>Soyez immédiatement notifié à chaque étape importante du transport et lors de l'arrivée.</p>
+                  <h4>{t("tracFeature2Title")}</h4>
+                  <p>{t("tracFeature2Desc")}</p>
                 </div>
               </div>
 
@@ -841,8 +826,8 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <h4>Garantie de sécurité & RGPD</h4>
-                  <p>Vos données de transport et d'identité sont cryptées et protégées conformément aux normes.</p>
+                  <h4>{t("tracFeature3Title")}</h4>
+                  <p>{t("tracFeature3Desc")}</p>
                 </div>
               </div>
             </div>
@@ -855,7 +840,7 @@ export default function Home() {
                 {/* Front: Scanning QR Code UI */}
                 <div className={styles.cardFront}>
                   <div className={styles.scanLine}></div>
-                  <span className={styles.cardFrontLabel}>SCANNER LE QR CODE</span>
+                  <span className={styles.cardFrontLabel}>{t("scanQr")}</span>
                   
                   <svg className={styles.qrCodeSvg} viewBox="0 0 100 100" fill="currentColor">
                     <path d="M0 0h30v30H0zm10 10h10v10H10zM70 0h30v30H70zm10 10h10v10H80zM0 70h30v30H0zm10 10h10v10H10z" />
@@ -863,13 +848,13 @@ export default function Home() {
                     <path d="M40 0h5v10h-5zm0 15h10v5H40zm15-15h5v5h-5zm0 10h10v5H55zM35 35h10v5H35zm15 5h5v10h-5zm10-5h5v5h-5zm15 10h5v5h-5zM35 50h5v5h-5zm5 10h10v5H40zm15-5h5v10h-5zm10-10h5v5h-5z" />
                   </svg>
 
-                  <p className={styles.cardFrontFooter}>Survolez pour voir le statut</p>
+                  <p className={styles.cardFrontFooter}>{t("hoverStatus")}</p>
                 </div>
 
                 {/* Back: Tracking Timeline Dashboard */}
                 <div className={styles.cardBack}>
                   <div className={styles.cardBackHeader}>
-                    <span className={styles.trackingBadge}>EN TRANSIT</span>
+                    <span className={styles.trackingBadge}>{t("inTransit")}</span>
                     <span className={styles.trackingId}>#ST-9842-CM</span>
                   </div>
 
@@ -880,20 +865,20 @@ export default function Home() {
                     </svg>
                   </div>
 
-                  <h3>Colis Sécurisé</h3>
+                  <h3>{t("securedPackage")}</h3>
 
                   <div className={styles.trackingSteps}>
                     <div className={styles.stepItemActive}>
                       <span className={styles.stepDot}></span>
-                      <span className={styles.stepText}>1. Colis enregistré à Douala</span>
+                      <span className={styles.stepText}>{t("step1")}</span>
                     </div>
                     <div className={styles.stepItemActive}>
                       <span className={styles.stepDot}></span>
-                      <span className={styles.stepText}>2. En transit (Axe Lourd)</span>
+                      <span className={styles.stepText}>{t("step2")}</span>
                     </div>
                     <div className={styles.stepItemPending}>
                       <span className={styles.stepDot}></span>
-                      <span className={styles.stepText}>3. Arrivée prévue à Yaoundé</span>
+                      <span className={styles.stepText}>{t("step3")}</span>
                     </div>
                   </div>
                 </div>
@@ -915,9 +900,7 @@ export default function Home() {
                 className={styles.footerLogo} 
               />
             </div>
-            <p className={styles.footerDesc}>
-              Votre marketplace de confiance pour comparer, réserver vos trajets en bus au Cameroun et suivre vos bagages en temps réel.
-            </p>
+            <p className={styles.footerDesc}>{t("footerDesc")}</p>
             <div className={styles.socialLinks}>
               <a href="#social" className={styles.socialIcon}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -941,30 +924,30 @@ export default function Home() {
 
           {/* Column 2: Navigation Links */}
           <div className={styles.footerLinkCol}>
-            <h4>Services</h4>
+            <h4>{t("footerServices")}</h4>
             <ul>
-              <li><Link href="/reserver">Réserver un billet</Link></li>
-              <li><Link href="/agences">Agences de transport</Link></li>
-              <li><Link href="/tracabilite">Suivre un colis</Link></li>
-              <li><Link href="/location">Location de bus</Link></li>
-              <li><a href="#qui-sommes-nous">Qui sommes-nous ?</a></li>
+              <li><Link href="/reserver">{t("footerBookTicket")}</Link></li>
+              <li><Link href="/agences">{t("footerTransportAgencies")}</Link></li>
+              <li><Link href="/tracabilite">{t("footerTrackPackage")}</Link></li>
+              <li><Link href="/location">{t("footerBusRental")}</Link></li>
+              <li><a href="#qui-sommes-nous">{t("footerAboutUs")}</a></li>
             </ul>
           </div>
 
           {/* Column 3: Legal & Security */}
           <div className={styles.footerLinkCol}>
-            <h4>Sécurité & Légal</h4>
+            <h4>{t("footerSecurity")}</h4>
             <ul>
-              <li><a href="#legal">Mentions Légales</a></li>
-              <li><a href="#privacy">Confidentialité</a></li>
-              <li><a href="#terms">Conditions Générales</a></li>
-              <li><a href="#rgpd">Respect RGPD</a></li>
+              <li><a href="#legal">{t("footerLegal")}</a></li>
+              <li><a href="#privacy">{t("footerPrivacy")}</a></li>
+              <li><a href="#terms">{t("footerTerms")}</a></li>
+              <li><a href="#rgpd">{t("footerRgpd")}</a></li>
             </ul>
           </div>
 
           {/* Column 4: Contact details */}
           <div className={styles.footerLinkCol}>
-            <h4>Contact</h4>
+            <h4>{t("footerContact")}</h4>
             <ul className={styles.footerContactList}>
               <li>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -993,13 +976,12 @@ export default function Home() {
         {/* Bottom Row */}
         <div className={styles.footerBottom}>
           <div className={`container ${styles.footerBottomContent}`}>
-            <p className={styles.copyright}>© 2026 SafeTrip. Tous droits réservés.</p>
-            <p className={styles.footerCredits}>Fait avec 💚 pour la mobilité au Cameroun.</p>
+            <p className={styles.copyright}>{tc("copyright")}</p>
+            <p className={styles.footerCredits}>{t("footerMadeWith")}</p>
           </div>
         </div>
       </footer>
 
     </main>
-    </>
   );
 }

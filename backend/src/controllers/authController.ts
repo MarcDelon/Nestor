@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
+import { sendWelcomeEmail } from '../utils/mailer';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'safetrip_super_secret_key_2026';
 
@@ -146,9 +147,17 @@ export const signup = async (req: Request, res: Response) => {
       }
 
       const token = jwt.sign({ id: newUser.id, email: newUser.email, role: userRole }, JWT_SECRET, { expiresIn: '24h' });
+      res.cookie('safetrip_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+      });
+      // Envoyer l'email de bienvenue de manière asynchrone (sans bloquer la réponse)
+      sendWelcomeEmail(lowerEmail, fullName, userRole).catch(err => console.error("Mail error:", err));
+
       return res.status(201).json({
         message: 'Utilisateur créé avec succès (Supabase).',
-        token,
         user: { id: newUser.id, email: newUser.email, fullName, role: userRole, photo: '/images/default_avatar.png' }
       });
     } else {
@@ -184,13 +193,20 @@ export const signup = async (req: Request, res: Response) => {
       }
 
       const token = jwt.sign({ id: newUserId, email: lowerEmail, role: userRole }, JWT_SECRET, { expiresIn: '24h' });
+      res.cookie('safetrip_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+      });
+      // Envoyer l'email de bienvenue de manière asynchrone (sans bloquer la réponse)
+      sendWelcomeEmail(lowerEmail, fullName, userRole).catch(err => console.error("Mail error:", err));
+
       return res.status(201).json({
         message: 'Utilisateur créé avec succès (Simulation Locale).',
-        token,
         user: { id: newUserId, email: lowerEmail, fullName, role: userRole, photo: '/images/default_avatar.png' }
       });
-    }
-  } catch (error: any) {
+    }  } catch (error: any) {
     return res.status(500).json({ error: error.message || 'Erreur interne du serveur.' });
   }
 };
@@ -257,9 +273,14 @@ export const login = async (req: Request, res: Response) => {
       }
 
       const token = jwt.sign({ id: user.id, email: user.email, role: user.role, agencyId }, JWT_SECRET, { expiresIn: '24h' });
+      res.cookie('safetrip_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+      });
       return res.status(200).json({
         message: `Connexion réussie en tant que ${user.role === 'admin' ? 'Administrateur' : user.role === 'agency' ? 'Agence' : 'Voyageur'}.`,
-        token,
         user: { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId }
       });
     } else {
@@ -294,9 +315,14 @@ export const login = async (req: Request, res: Response) => {
       }
 
       const token = jwt.sign({ id: user.id, email: user.email, role: user.role, agencyId }, JWT_SECRET, { expiresIn: '24h' });
+      res.cookie('safetrip_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+      });
       return res.status(200).json({
         message: `Connexion réussie en tant que ${user.role === 'admin' ? 'Administrateur' : user.role === 'agency' ? 'Agence' : 'Voyageur'} (Simulation).`,
-        token,
         user: { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId }
       });
     }
@@ -304,3 +330,84 @@ export const login = async (req: Request, res: Response) => {
     return res.status(500).json({ error: error.message || 'Erreur interne du serveur.' });
   }
 };
+
+// 3. RECUPERER L'UTILISATEUR CONNECTE (Me)
+export const getMe = async (req: Request, res: Response) => {
+  try {
+    const userPayload = (req as any).user;
+    if (!userPayload) {
+      return res.status(401).json({ error: 'Non authentifié.' });
+    }
+
+    if (supabase) {
+      // Charger le profil selon le rôle
+      let fullName = '';
+      let photo = '';
+      let agencyId: number | undefined;
+
+      if (userPayload.role === 'client') {
+        const { data: client } = await (supabase as any)
+          .from('clients')
+          .select('full_name, photo')
+          .eq('id', userPayload.id)
+          .maybeSingle();
+        fullName = client?.full_name || 'Voyageur';
+        photo = client?.photo || '/images/default_avatar.png';
+      } else if (userPayload.role === 'agency') {
+        const { data: agency } = await (supabase as any)
+          .from('agencies')
+          .select('id, name, logo, photo')
+          .eq('user_id', userPayload.id)
+          .maybeSingle();
+        fullName = agency?.name || 'Agence';
+        photo = agency?.logo || agency?.photo || '/images/default_agency.png';
+        agencyId = agency?.id;
+      } else if (userPayload.role === 'admin') {
+        const { data: admin } = await (supabase as any)
+          .from('admins')
+          .select('full_name, photo')
+          .eq('id', userPayload.id)
+          .maybeSingle();
+        fullName = admin?.full_name || 'Administrateur';
+        photo = admin?.photo || '/images/default_admin.png';
+      }
+
+      return res.status(200).json({
+        user: { id: userPayload.id, email: userPayload.email, fullName, role: userPayload.role, photo, agencyId }
+      });
+    } else {
+      // Simulation locale
+      let fullName = '';
+      let photo = '';
+      let agencyId: number | undefined;
+
+      if (userPayload.role === 'client') {
+        const client = simulatedDatabase.clients.find(c => c.id === userPayload.id);
+        fullName = client?.fullName || 'Voyageur';
+        photo = client?.photo || '/images/default_avatar.png';
+      } else if (userPayload.role === 'agency') {
+        const agency = simulatedDatabase.agencies.find(a => a.user_id === userPayload.id);
+        fullName = agency?.name || 'Agence';
+        photo = agency?.logo || '/images/default_agency.png';
+        agencyId = agency?.id;
+      } else if (userPayload.role === 'admin') {
+        const admin = simulatedDatabase.admins.find(a => a.id === userPayload.id);
+        fullName = admin?.fullName || 'Administrateur';
+        photo = admin?.photo || '/images/default_admin.png';
+      }
+
+      return res.status(200).json({
+        user: { id: userPayload.id, email: userPayload.email, fullName, role: userPayload.role, photo, agencyId }
+      });
+    }
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message || 'Erreur lors de la récupération de la session.' });
+  }
+};
+
+// 4. DECONNEXION / LOGOUT
+export const logout = async (req: Request, res: Response) => {
+  res.clearCookie('safetrip_token');
+  return res.status(200).json({ success: true, message: 'Déconnexion réussie.' });
+};
+

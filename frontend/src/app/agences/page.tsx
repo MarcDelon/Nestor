@@ -4,8 +4,11 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { openSmartsuppWithMessage } from "@/components/SmartsuppChat";
 import { Icon } from "@/components/Icons";
+import { useTranslations } from "next-intl";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useUser } from "@/components/UserContext";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
 
 interface Agency {
   id: number;
@@ -34,48 +37,72 @@ const CERT_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 interface RequestForm {
-  clientName: string;
-  clientPhone: string;
-  clientEmail: string;
-  requestType: string;
+  // Expéditeur
+  collectionMode: string;
+  senderName: string;
+  senderPhone: string;
+  senderEmail: string;
+  pickupAddress: string;
   originCity: string;
+  // Destinataire
+  recipientName: string;
+  recipientPhone: string;
+  deliveryAddress: string;
   destinationCity: string;
+  // Colis
+  parcelType: string;
+  parcelWeight: string;
+  parcelValue: string;
+  parcelFragile: boolean;
+  parcelContent: string;
+  // Logistique
   preferredDate: string;
-  description: string;
+  instructions: string;
 }
 
 const EMPTY_FORM: RequestForm = {
-  clientName: "",
-  clientPhone: "",
-  clientEmail: "",
-  requestType: "envoi_colis",
+  collectionMode: "domicile",
+  senderName: "",
+  senderPhone: "",
+  senderEmail: "",
+  pickupAddress: "",
   originCity: "",
+  recipientName: "",
+  recipientPhone: "",
+  deliveryAddress: "",
   destinationCity: "",
+  parcelType: "small",
+  parcelWeight: "",
+  parcelValue: "",
+  parcelFragile: false,
+  parcelContent: "",
   preferredDate: "",
-  description: "",
+  instructions: "",
 };
 
 export default function AgencesPage() {
+  const t = useTranslations("Agences");
+  const tc = useTranslations("Common");
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalAgency, setModalAgency] = useState<Agency | null>(null);
   const [form, setForm] = useState<RequestForm>(EMPTY_FORM);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const { user } = useUser();
+  const isLoggedIn = !!user;
+  const userRole = user?.role || null;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const loggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    setIsLoggedIn(loggedIn);
-    setUserRole(localStorage.getItem("safetrip_user_role"));
-
-    // Pre-fill name from profile if logged in
-    if (loggedIn) {
-      const name = localStorage.getItem("safetrip_user_name") || "";
-      const email = localStorage.getItem("safetrip_user_email") || "";
-      setForm(f => ({ ...f, clientName: name, clientEmail: email }));
+    // Pre-fill sender info from profile if logged in
+    if (user) {
+      setForm(f => ({
+        ...f,
+        senderName: user.fullName || "",
+        senderEmail: user.email || "",
+        senderPhone: ""
+      }));
     }
 
     fetch(`${API_BASE}/api/agency/agencies`)
@@ -85,67 +112,128 @@ export default function AgencesPage() {
         setLoading(false);
       })
       .catch(() => { setAgencies(FALLBACK_AGENCIES); setLoading(false); });
-  }, []);
+  }, [user]);
 
   const openModal = (agency: Agency) => {
     setModalAgency(agency);
     setSubmitted(false);
-    setForm(f => ({ ...f, ...EMPTY_FORM, clientName: f.clientName, clientEmail: f.clientEmail }));
+    setForm(f => ({ ...EMPTY_FORM, senderName: f.senderName, senderEmail: f.senderEmail, senderPhone: f.senderPhone }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.clientName.trim() || !form.clientPhone.trim() || !form.description.trim()) return;
+    if (
+      !form.senderName.trim() ||
+      !form.senderPhone.trim() ||
+      (form.collectionMode === "domicile" && !form.pickupAddress.trim()) ||
+      !form.originCity.trim() ||
+      !form.recipientName.trim() ||
+      !form.recipientPhone.trim() ||
+      !form.deliveryAddress.trim() ||
+      !form.destinationCity.trim() ||
+      !form.parcelContent.trim()
+    ) return;
     setSubmitting(true);
 
     const typeLabels: Record<string, string> = {
-      envoi_colis: "Envoi de colis",
-      livraison: "Livraison à domicile",
-      demande_speciale: "Demande spéciale",
-      autre: "Autre demande",
+      document: "Document / enveloppe",
+      small: "Petit colis (< 5 kg)",
+      medium: "Colis moyen (5-20 kg)",
+      large: "Gros colis (> 20 kg)",
+      fragile: "Objet fragile",
+      other: "Autre",
     };
 
     const msg = [
-      `📦 NOUVELLE DEMANDE SAFETRIP`,
+      `📦 NOUVELLE DEMANDE D'ENVOI DE COLIS`,
       `━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      `Agence concernée : ${modalAgency?.name}`,
-      `Type de service  : ${typeLabels[form.requestType] || form.requestType}`,
+      `Agence : ${modalAgency?.name}`,
       ``,
-      `👤 Client : ${form.clientName}`,
-      `📞 Téléphone : ${form.clientPhone}`,
-      form.clientEmail ? `📧 Email : ${form.clientEmail}` : "",
+      `📤 EXPÉDITEUR`,
+      `  Nom : ${form.senderName}`,
+      `  Téléphone : ${form.senderPhone}`,
+      form.senderEmail ? `  Email : ${form.senderEmail}` : "",
+      `  Mode de dépôt : ${form.collectionMode === "domicile" ? "Collecte à domicile" : "Dépôt en agence"}`,
+      form.collectionMode === "domicile" ? `  Adresse d'enlèvement : ${form.pickupAddress}` : "",
+      `  Ville : ${form.originCity}`,
       ``,
-      form.originCity || form.destinationCity
-        ? `🗺️ Trajet : ${form.originCity || "—"} → ${form.destinationCity || "—"}`
-        : "",
-      form.preferredDate ? `📅 Date souhaitée : ${form.preferredDate}` : "",
+      `� DESTINATAIRE`,
+      `  Nom : ${form.recipientName}`,
+      `  Téléphone : ${form.recipientPhone}`,
+      `  Adresse de livraison : ${form.deliveryAddress}`,
+      `  Ville : ${form.destinationCity}`,
       ``,
-      `📝 Description :`,
-      form.description,
+      `📦 COLIS`,
+      `  Type : ${typeLabels[form.parcelType] || form.parcelType}`,
+      form.parcelWeight ? `  Poids estimé : ${form.parcelWeight} kg` : "",
+      form.parcelValue ? `  Valeur déclarée : ${form.parcelValue} FCFA` : "",
+      form.parcelFragile ? `  ⚠️ Fragile : OUI` : "",
+      `  Contenu : ${form.parcelContent}`,
+      ``,
+      form.preferredDate ? `📅 Date d'enlèvement : ${form.preferredDate}` : "",
+      form.instructions ? `📝 Instructions : ${form.instructions}` : "",
     ].filter(Boolean).join("\n");
 
-    // Save to localStorage as fallback
+    // Save to sessionStorage as fallback
     try {
-      const reqs = JSON.parse(localStorage.getItem("safetrip_service_requests") || "[]");
+      const reqs = JSON.parse(sessionStorage.getItem("safetrip_service_requests") || "[]");
       reqs.unshift({
         id: Date.now(),
         agencyName: modalAgency?.name,
+        kind: "envoi_colis",
         ...form,
         createdAt: new Date().toLocaleDateString("fr-FR"),
         status: "nouveau",
       });
-      localStorage.setItem("safetrip_service_requests", JSON.stringify(reqs));
+      sessionStorage.setItem("safetrip_service_requests", JSON.stringify(reqs));
     } catch { /* ignore */ }
 
-    // Open Smartsupp with the pre-filled message
-    setTimeout(() => {
-      openSmartsuppWithMessage(msg, form.clientName, form.clientEmail || undefined);
-      setSubmitting(false);
-      setSubmitted(true);
-    }, 600);
+    // Persist into the colis table so it appears in:
+    //   - the agency dashboard "Colis et courrier" tab
+    //   - the client dashboard "Colis" tab (if logged in)
+    const clientId = user?.id || null;
+    const payload = {
+      agency_name: modalAgency?.name,
+      client_id: clientId,
+      sender_name: form.senderName,
+      sender_phone: form.senderPhone,
+      sender_email: form.senderEmail,
+      pickup_address: form.collectionMode === "domicile" ? form.pickupAddress : "Dépôt en agence",
+      origin_city: form.originCity,
+      recipient_name: form.recipientName,
+      recipient_phone: form.recipientPhone,
+      delivery_address: form.deliveryAddress,
+      destination_city: form.destinationCity,
+      parcel_type: form.parcelType,
+      parcel_weight: form.parcelWeight,
+      parcel_value: form.parcelValue,
+      parcel_fragile: form.parcelFragile,
+      parcel_content: form.parcelContent,
+      preferred_date: form.preferredDate,
+      instructions: form.instructions,
+    };
+
+    fetch(`${API_BASE}/api/client/colis-request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .catch(err => console.warn("⚠️ Colis request API non joignable:", err))
+      .finally(() => {
+        // Open Smartsupp with the pre-filled message regardless of API result
+        openSmartsuppWithMessage(msg, form.senderName, form.senderEmail || undefined);
+        setSubmitting(false);
+        setSubmitted(true);
+      });
   };
 
   const certStyle = (cert: string) => CERT_COLORS[cert] || { bg: "#f7fafc", color: "#4a5568" };
+
+  const inputStyle: React.CSSProperties = { background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" };
+  const labelStyle: React.CSSProperties = { fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 };
+  const fieldWrap: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 };
+  const sectionTitleStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, fontSize: "0.85rem", fontWeight: 800, color: "#0A2F1D", margin: "4px 0 14px", paddingBottom: 8, borderBottom: "2px solid #eef8f3" };
+  const sectionBadge: React.CSSProperties = { width: 22, height: 22, background: "#00673C", color: "#FCD116", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", fontWeight: 800 };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #F7F4EE 0%, #EDE9DF 100%)", fontFamily: "var(--font-body, 'DM Sans', sans-serif)" }}>
@@ -179,15 +267,16 @@ export default function AgencesPage() {
             <img src="/images/logo-removebg-preview (2).png" alt="SafeTrip" style={{ height: 44, objectFit: "contain" }} />
           </Link>
           <nav className="agences-nav">
-            <Link href="/reserver" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>Réserver</Link>
-            <Link href="/agences" style={{ fontWeight: 800, color: "#00673C", fontSize: "0.92rem", textDecoration: "none" }}>Agences</Link>
-            <Link href="/tracabilite" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>Traçabilité</Link>
-            <Link href="/location" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>Location</Link>
-            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ fontWeight: 650, color: "#C8941E", fontSize: "0.92rem", textDecoration: "none" }}>Mon espace</Link>}
+            <Link href="/reserver" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("reserve")}</Link>
+            <Link href="/agences" style={{ fontWeight: 800, color: "#00673C", fontSize: "0.92rem", textDecoration: "none" }}>{tc("agencies")}</Link>
+            <Link href="/tracabilite" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("traceability")}</Link>
+            <Link href="/location" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("rental")}</Link>
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ fontWeight: 650, color: "#C8941E", fontSize: "0.92rem", textDecoration: "none" }}>{tc("travelerSpace")}</Link>}
           </nav>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <LanguageToggle />
             <Link href="/login" className="agences-header-btn" style={{ background: "#00673C", color: "#fff", fontWeight: 700, fontSize: "0.88rem", padding: "9px 22px", borderRadius: 30, textDecoration: "none" }}>
-              {isLoggedIn ? "Mon compte" : "Connexion"}
+              {isLoggedIn ? tc("myAccount") : tc("login")}
             </Link>
             <button className="agences-hamburger" onClick={() => setMobileMenuOpen(v => !v)} aria-label="Menu">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -198,13 +287,13 @@ export default function AgencesPage() {
         </div>
         {/* Mobile menu */}
         <div className={`agences-mobile-menu${mobileMenuOpen ? " open" : ""}`}>
-          <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>Réserver</Link>
-          <Link href="/agences" onClick={() => setMobileMenuOpen(false)} style={{ color: "#00673C" }}>Agences</Link>
-          <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>Traçabilité</Link>
-          <Link href="/location" onClick={() => setMobileMenuOpen(false)}>Location</Link>
-          {isLoggedIn && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)} style={{ color: "#C8941E" }}>Mon espace</Link>}
+          <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
+          <Link href="/agences" onClick={() => setMobileMenuOpen(false)} style={{ color: "#00673C" }}>{tc("agencies")}</Link>
+          <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
+          <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+          {isLoggedIn && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)} style={{ color: "#C8941E" }}>{tc("travelerSpace")}</Link>}
           <Link href="/login" onClick={() => setMobileMenuOpen(false)} style={{ background: "#00673C", color: "#fff", margin: "8px 16px", borderRadius: 8, padding: "12px 16px", textAlign: "center" }}>
-            {isLoggedIn ? "Mon compte" : "Connexion"}
+            {isLoggedIn ? tc("myAccount") : tc("login")}
           </Link>
         </div>
       </header>
@@ -213,13 +302,13 @@ export default function AgencesPage() {
       <section style={{ maxWidth: 1200, margin: "0 auto", padding: "60px 24px 40px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
           <span style={{ background: "linear-gradient(90deg,#FCD116,#CE1126,#007A5E)", height: 3, width: 40, borderRadius: 99, display: "inline-block" }} />
-          <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#718096", textTransform: "uppercase", letterSpacing: 2 }}>Réseau Partenaire</span>
+          <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "#718096", textTransform: "uppercase", letterSpacing: 2 }}>{t("partnerNetwork")}</span>
         </div>
         <h1 style={{ fontSize: "2.4rem", fontWeight: 900, color: "#0A2F1D", margin: "0 0 12px 0", lineHeight: 1.15 }}>
-          Nos Agences de Transport Agréées
+          {t("title")}
         </h1>
         <p style={{ color: "#718096", fontSize: "1.05rem", maxWidth: 560, lineHeight: 1.6, margin: "0 0 8px 0" }}>
-          Toutes les compagnies partenaires SafeTrip — certifiées, suivies en temps réel. Vous avez un colis à envoyer sans vous déplacer ? Utilisez le bouton <strong style={{ color: "#00673C" }}>Demande sans déplacement</strong>.
+          {t("desc")} <strong style={{ color: "#00673C" }}>{t("noDisplacementBtn")}</strong>.
         </p>
       </section>
 
@@ -228,7 +317,7 @@ export default function AgencesPage() {
         {loading ? (
           <div style={{ textAlign: "center", padding: "60px 0" }}>
             <div style={{ width: 36, height: 36, borderRadius: "50%", border: "3px solid #eef8f3", borderTopColor: "#00673C", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
-            <p style={{ color: "#718096", fontWeight: 600 }}>Chargement des agences…</p>
+            <p style={{ color: "#718096", fontWeight: 600 }}>{t("loadingAgencies")}</p>
           </div>
         ) : (
           <div className="agency-grid">
@@ -279,7 +368,7 @@ export default function AgencesPage() {
                         onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#00673C"; (e.currentTarget as HTMLAnchorElement).style.color = "#fff"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#eef8f3"; (e.currentTarget as HTMLAnchorElement).style.color = "#00673C"; }}
                       >
-                        Voir les trajets
+                        {t("seeTrips")}
                       </Link>
                       <button
                         type="button"
@@ -288,7 +377,7 @@ export default function AgencesPage() {
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "#C8941E"; (e.currentTarget as HTMLButtonElement).style.color = "#fff"; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "#0A2F1D"; (e.currentTarget as HTMLButtonElement).style.color = "#FCD116"; }}
                       >
-                        <Icon name="package" size={14} /> Demande sans déplacement
+                        <Icon name="package" size={14} /> {t("noDisplacementBtn")}
                       </button>
                     </div>
                   </div>
@@ -316,7 +405,7 @@ export default function AgencesPage() {
                   <img src={modalAgency.logo} alt={modalAgency.name} style={{ maxWidth: "100%", objectFit: "contain" }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.55)", fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 1 }}>Demande sans déplacement</p>
+                  <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.55)", fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 1 }}>{t("requestModal_title")}</p>
                   <h3 style={{ color: "#ffffff", fontWeight: 800, fontSize: "1.1rem", margin: 0 }}>{modalAgency.name}</h3>
                 </div>
               </div>
@@ -330,65 +419,117 @@ export default function AgencesPage() {
                 <div style={{ width: 64, height: 64, background: "#eef8f3", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00673C" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
                 </div>
-                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#0A2F1D", marginBottom: 8 }}>Demande envoyée !</h3>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#0A2F1D", marginBottom: 8 }}>{t("successTitle")}</h3>
                 <p style={{ color: "#718096", fontSize: "0.9rem", lineHeight: 1.6, marginBottom: 24 }}>
-                  Votre demande a été transmise au service client via Smartsupp. Un conseiller SafeTrip vous contactera sous 24h au numéro indiqué.
+                  {t("successDesc")}
                 </p>
                 <button onClick={() => setModalAgency(null)} style={{ background: "#00673C", color: "#fff", border: "none", borderRadius: 10, padding: "12px 32px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: "0.9rem" }}>
-                  Fermer
+                  {tc("close")}
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} style={{ padding: "28px" }}>
-                <p style={{ color: "#718096", fontSize: "0.85rem", lineHeight: 1.5, marginTop: 0, marginBottom: 24 }}>
-                  Remplissez ce formulaire. Votre demande sera transmise <strong>directement à notre service client</strong> via chat — nous vous recontactons sous 24h.
+                <p style={{ color: "#718096", fontSize: "0.85rem", lineHeight: 1.5, marginTop: 0, marginBottom: 20 }}>
+                  {t("requestModal_desc")}
                 </p>
 
+                {/* === EXPÉDITEUR === */}
+                <div style={sectionTitleStyle}><span style={sectionBadge}>1</span> {t("senderSection")}</div>
                 <div className="form-grid-2">
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Votre nom *</label>
-                    <input required value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} placeholder="Jean Dupont" style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }} />
+                  <div style={{ ...fieldWrap, marginBottom: 0 }}>
+                    <label style={labelStyle}>{t("yourName")}</label>
+                    <input required value={form.senderName} onChange={e => setForm(f => ({ ...f, senderName: e.target.value }))} placeholder="Jean Dupont" style={inputStyle} />
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Téléphone *</label>
-                    <input required value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} placeholder="+237 6XX XX XX XX" style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }} />
+                  <div style={{ ...fieldWrap, marginBottom: 0 }}>
+                    <label style={labelStyle}>{t("phone")}</label>
+                    <input required value={form.senderPhone} onChange={e => setForm(f => ({ ...f, senderPhone: e.target.value }))} placeholder="+237 6XX XX XX XX" style={inputStyle} />
                   </div>
                 </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Email (facultatif)</label>
-                  <input type="email" value={form.clientEmail} onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))} placeholder="vous@exemple.cm" style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }} />
+                <div style={{ ...fieldWrap, marginTop: 14 }}>
+                  <label style={labelStyle}>{t("email")}</label>
+                  <input type="email" value={form.senderEmail} onChange={e => setForm(f => ({ ...f, senderEmail: e.target.value }))} placeholder="vous@exemple.cm" style={inputStyle} />
                 </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Type de service *</label>
-                  <select value={form.requestType} onChange={e => setForm(f => ({ ...f, requestType: e.target.value }))} style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }}>
-                    <option value="envoi_colis">Envoi de colis (sans déplacement)</option>
-                    <option value="livraison">Livraison à domicile</option>
-                    <option value="demande_speciale">Demande spéciale (VIP, groupe...)</option>
-                    <option value="autre">Autre demande</option>
+                <div style={fieldWrap}>
+                  <label style={labelStyle}>Mode de dépôt / collecte *</label>
+                  <select value={form.collectionMode} onChange={e => setForm(f => ({ ...f, collectionMode: e.target.value }))} style={inputStyle}>
+                    <option value="domicile">Collecte à domicile (on vient chercher le colis)</option>
+                    <option value="agence">Dépôt en agence (vous l'apportez à l'agence)</option>
                   </select>
                 </div>
+                
+                {form.collectionMode === "domicile" && (
+                  <div style={fieldWrap}>
+                    <label style={labelStyle}>{t("pickupAddress")}</label>
+                    <input required value={form.pickupAddress} onChange={e => setForm(f => ({ ...f, pickupAddress: e.target.value }))} placeholder={t("pickupAddressPlaceholder")} style={inputStyle} />
+                  </div>
+                )}
+                <div style={{ ...fieldWrap, marginBottom: 22 }}>
+                  <label style={labelStyle}>{t("originCity")}</label>
+                  <input required value={form.originCity} onChange={e => setForm(f => ({ ...f, originCity: e.target.value }))} placeholder="Douala" style={inputStyle} />
+                </div>
 
+                {/* === DESTINATAIRE === */}
+                <div style={sectionTitleStyle}><span style={sectionBadge}>2</span> {t("recipientSection")}</div>
                 <div className="form-grid-2">
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Ville d&apos;origine</label>
-                    <input value={form.originCity} onChange={e => setForm(f => ({ ...f, originCity: e.target.value }))} placeholder="Douala" style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }} />
+                  <div style={{ ...fieldWrap, marginBottom: 0 }}>
+                    <label style={labelStyle}>{t("recipientName")}</label>
+                    <input required value={form.recipientName} onChange={e => setForm(f => ({ ...f, recipientName: e.target.value }))} placeholder="Marie Kamga" style={inputStyle} />
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Ville de destination</label>
-                    <input value={form.destinationCity} onChange={e => setForm(f => ({ ...f, destinationCity: e.target.value }))} placeholder="Yaoundé" style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }} />
+                  <div style={{ ...fieldWrap, marginBottom: 0 }}>
+                    <label style={labelStyle}>{t("recipientPhone")}</label>
+                    <input required value={form.recipientPhone} onChange={e => setForm(f => ({ ...f, recipientPhone: e.target.value }))} placeholder="+237 6XX XX XX XX" style={inputStyle} />
                   </div>
                 </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Date souhaitée</label>
-                  <input type="date" value={form.preferredDate} onChange={e => setForm(f => ({ ...f, preferredDate: e.target.value }))} style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748" }} />
+                <div style={{ ...fieldWrap, marginTop: 14 }}>
+                  <label style={labelStyle}>{t("deliveryAddress")}</label>
+                  <input required value={form.deliveryAddress} onChange={e => setForm(f => ({ ...f, deliveryAddress: e.target.value }))} placeholder={t("deliveryAddressPlaceholder")} style={inputStyle} />
+                </div>
+                <div style={{ ...fieldWrap, marginBottom: 22 }}>
+                  <label style={labelStyle}>{t("destCity")}</label>
+                  <input required value={form.destinationCity} onChange={e => setForm(f => ({ ...f, destinationCity: e.target.value }))} placeholder="Yaoundé" style={inputStyle} />
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 24 }}>
-                  <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4a5568", textTransform: "uppercase", letterSpacing: 0.5 }}>Description de votre demande *</label>
-                  <textarea required rows={4} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Décrivez votre demande en détail : nature du colis, dimensions, urgence, instructions particulières..." style={{ background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px", fontSize: "0.88rem", outline: "none", fontFamily: "inherit", color: "#2d3748", resize: "vertical" }} />
+                {/* === COLIS === */}
+                <div style={sectionTitleStyle}><span style={sectionBadge}>3</span> {t("parcelSection")}</div>
+                <div style={fieldWrap}>
+                  <label style={labelStyle}>{t("parcelType")}</label>
+                  <select value={form.parcelType} onChange={e => setForm(f => ({ ...f, parcelType: e.target.value }))} style={inputStyle}>
+                    <option value="document">{t("parcel_document")}</option>
+                    <option value="small">{t("parcel_small")}</option>
+                    <option value="medium">{t("parcel_medium")}</option>
+                    <option value="large">{t("parcel_large")}</option>
+                    <option value="fragile">{t("parcel_fragile")}</option>
+                    <option value="other">{t("parcel_other")}</option>
+                  </select>
+                </div>
+                <div className="form-grid-2">
+                  <div style={{ ...fieldWrap, marginBottom: 0 }}>
+                    <label style={labelStyle}>{t("parcelWeight")}</label>
+                    <input type="number" min="0" step="0.1" value={form.parcelWeight} onChange={e => setForm(f => ({ ...f, parcelWeight: e.target.value }))} placeholder="2.5" style={inputStyle} />
+                  </div>
+                  <div style={{ ...fieldWrap, marginBottom: 0 }}>
+                    <label style={labelStyle}>{t("parcelValue")}</label>
+                    <input type="number" min="0" value={form.parcelValue} onChange={e => setForm(f => ({ ...f, parcelValue: e.target.value }))} placeholder="50000" style={inputStyle} />
+                  </div>
+                </div>
+                <div style={{ ...fieldWrap, marginTop: 14 }}>
+                  <label style={labelStyle}>{t("parcelContent")}</label>
+                  <textarea required rows={3} value={form.parcelContent} onChange={e => setForm(f => ({ ...f, parcelContent: e.target.value }))} placeholder={t("parcelContentPlaceholder")} style={{ ...inputStyle, resize: "vertical" }} />
+                </div>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#fff8e1", border: "1.5px solid #FCD116", borderRadius: 10, cursor: "pointer", marginBottom: 22 }}>
+                  <input type="checkbox" checked={form.parcelFragile} onChange={e => setForm(f => ({ ...f, parcelFragile: e.target.checked }))} style={{ width: 16, height: 16, accentColor: "#C8941E" }} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#5a4500" }}>⚠️ {t("parcelFragile")}</span>
+                </label>
+
+                {/* === LOGISTIQUE === */}
+                <div style={sectionTitleStyle}><span style={sectionBadge}>4</span> {t("logisticsSection")}</div>
+                <div style={fieldWrap}>
+                  <label style={labelStyle}>{t("preferredDate")}</label>
+                  <input type="date" value={form.preferredDate} onChange={e => setForm(f => ({ ...f, preferredDate: e.target.value }))} style={inputStyle} />
+                </div>
+                <div style={{ ...fieldWrap, marginBottom: 24 }}>
+                  <label style={labelStyle}>{t("instructions")}</label>
+                  <textarea rows={3} value={form.instructions} onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))} placeholder={t("instructionsPlaceholder")} style={{ ...inputStyle, resize: "vertical" }} />
                 </div>
 
                 <button
@@ -399,18 +540,18 @@ export default function AgencesPage() {
                   {submitting ? (
                     <>
                       <div style={{ width: 18, height: 18, border: "2px solid rgba(252,209,22,0.3)", borderTopColor: "#FCD116", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                      Envoi en cours…
+                      {tc("sendingQuote")}
                     </>
                   ) : (
                     <>
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                      Envoyer au service client
+                      {t("sendBtn")}
                     </>
                   )}
                 </button>
 
                 <p style={{ fontSize: "0.72rem", color: "#a0aec0", textAlign: "center", marginTop: 12, lineHeight: 1.5 }}>
-                  Votre demande sera transmise directement via Smartsupp. Le chat s&apos;ouvrira pour confirmer la réception.
+                  {t("smartsuppNote")}
                 </p>
               </form>
             )}

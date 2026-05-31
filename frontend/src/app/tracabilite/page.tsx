@@ -4,8 +4,11 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/Icons";
 import type { IconName } from "@/components/Icons";
+import { useTranslations } from "next-intl";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useUser } from "@/components/UserContext";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE = (typeof window !== 'undefined' && !window.location.hostname.includes('loca.lt') ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000'));
 
 interface ColisItem {
   id: string;
@@ -28,37 +31,38 @@ interface ColisItem {
   createdAt?: string;
 }
 
-const STATUS_STEPS: { key: string; label: string; icon: IconName }[] = [
-  { key: "En attente de scan", label: "Enregistré",    icon: "clipboard" },
-  { key: "Scanné en gare",    label: "Scanné en gare", icon: "scan" },
-  { key: "À bord du bus",     label: "À bord",         icon: "bus" },
-  { key: "En transit",        label: "En transit",     icon: "route" },
-  { key: "Livré",             label: "Livré",          icon: "check-circle" },
+const STATUS_STEP_KEYS: { key: string; tKey: string; icon: IconName }[] = [
+  { key: "En attente de scan", tKey: "step_register", icon: "clipboard" },
+  { key: "Scanné en gare",    tKey: "step_scan",      icon: "scan" },
+  { key: "À bord du bus",     tKey: "step_onboard",   icon: "bus" },
+  { key: "En transit",        tKey: "step_scan",      icon: "route" },
+  { key: "Livré",             tKey: "step_delivery",  icon: "check-circle" },
 ];
 
 function getStepIndex(status: string): number {
-  const idx = STATUS_STEPS.findIndex(s => s.key === status);
+  const idx = STATUS_STEP_KEYS.findIndex(s => s.key === status);
   return idx >= 0 ? idx : 0;
 }
 
 export default function TracabilitePage() {
+  const t = useTranslations("Tracabilite");
+  const tc = useTranslations("Common");
+  const STATUS_STEPS = STATUS_STEP_KEYS.map(s => ({ ...s, label: t(s.tKey as Parameters<typeof t>[0]) }));
   const [searchRef, setSearchRef] = useState("");
   const [result, setResult] = useState<ColisItem | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [searching, setSearching] = useState(false);
   const [recentColis, setRecentColis] = useState<ColisItem[]>([]);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const loggedIn = localStorage.getItem("safetrip_logged_in") === "true";
-    setIsLoggedIn(loggedIn);
-    setUserRole(localStorage.getItem("safetrip_user_role"));
+  const { user } = useUser();
+  const isLoggedIn = !!user;
+  const userRole = user?.role || null;
 
-    // Load recent colis from localStorage
+  useEffect(() => {
+    // Load recent colis from sessionStorage
     try {
-      const stored = JSON.parse(localStorage.getItem("safetrip_colis_db") || "[]");
+      const stored = JSON.parse(sessionStorage.getItem("safetrip_colis_db") || "[]");
       setRecentColis(stored.slice(0, 3));
     } catch { /* ignore */ }
   }, []);
@@ -72,9 +76,9 @@ export default function TracabilitePage() {
     setResult(null);
     setNotFound(false);
 
-    // 1. Search localStorage first (fast)
+    // 1. Search sessionStorage first (fast)
     try {
-      const stored: ColisItem[] = JSON.parse(localStorage.getItem("safetrip_colis_db") || "[]");
+      const stored: ColisItem[] = JSON.parse(sessionStorage.getItem("safetrip_colis_db") || "[]");
       const local = stored.find(c =>
         c.id?.toLowerCase().includes(q.toLowerCase()) ||
         (c.qr_ref || c.qrRef || "").toLowerCase().includes(q.toLowerCase()) ||
@@ -85,9 +89,8 @@ export default function TracabilitePage() {
 
     // 2. Fallback to API
     try {
-      const token = localStorage.getItem("safetrip_token") || "";
       const res = await fetch(`${API_BASE}/api/client/colis`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
       if (res.ok) {
         const data: ColisItem[] = await res.json();
@@ -96,7 +99,20 @@ export default function TracabilitePage() {
           (c.qr_ref || c.qrRef || "").toLowerCase().includes(q.toLowerCase()) ||
           c.label?.toLowerCase().includes(q.toLowerCase())
         );
-        if (found) { setResult(found); setSearching(false); return; }
+        if (found) {
+          setResult(found);
+          setSearching(false);
+          // Save found colis to recent colis in sessionStorage
+          try {
+            const stored: ColisItem[] = JSON.parse(sessionStorage.getItem("safetrip_colis_db") || "[]");
+            if (!stored.some(c => c.id === found.id)) {
+              const updated = [found, ...stored].slice(0, 5);
+              sessionStorage.setItem("safetrip_colis_db", JSON.stringify(updated));
+              setRecentColis(updated.slice(0, 3));
+            }
+          } catch { /* ignore */ }
+          return;
+        }
       }
     } catch { /* ignore */ }
 
@@ -117,16 +133,17 @@ export default function TracabilitePage() {
 
           {/* Desktop nav */}
           <nav style={{ display: "flex", gap: 28, alignItems: "center" }} className="desktop-nav">
-            <Link href="/reserver" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>Réserver</Link>
-            <Link href="/agences" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>Agences</Link>
-            <Link href="/tracabilite" style={{ fontWeight: 800, color: "#00673C", fontSize: "0.92rem", textDecoration: "none" }}>Traçabilité</Link>
-            <Link href="/location" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>Location</Link>
-            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ fontWeight: 650, color: "#C8941E", fontSize: "0.92rem", textDecoration: "none" }}>Mon espace</Link>}
+            <Link href="/reserver" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("reserve")}</Link>
+            <Link href="/agences" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("agencies")}</Link>
+            <Link href="/tracabilite" style={{ fontWeight: 800, color: "#00673C", fontSize: "0.92rem", textDecoration: "none" }}>{tc("traceability")}</Link>
+            <Link href="/location" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("rental")}</Link>
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ fontWeight: 650, color: "#C8941E", fontSize: "0.92rem", textDecoration: "none" }}>{tc("travelerSpace")}</Link>}
           </nav>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <LanguageToggle />
             <Link href="/login" style={{ background: "#00673C", color: "#fff", fontWeight: 700, fontSize: "0.88rem", padding: "9px 22px", borderRadius: 30, textDecoration: "none" }}>
-              {isLoggedIn ? "Mon compte" : "Connexion"}
+              {isLoggedIn ? tc("myAccount") : tc("login")}
             </Link>
             {/* Hamburger */}
             <button onClick={() => setMobileMenuOpen(o => !o)} style={{ display: "none", background: "none", border: "none", cursor: "pointer", padding: 6 }} className="hamburger-btn" aria-label="Menu">
@@ -138,11 +155,11 @@ export default function TracabilitePage() {
         {/* Mobile menu */}
         {mobileMenuOpen && (
           <div style={{ background: "#fff", borderTop: "1px solid #E6E1D6", padding: "16px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-            <Link href="/reserver" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>Réserver</Link>
-            <Link href="/agences" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>Agences</Link>
-            <Link href="/tracabilite" style={{ fontWeight: 700, color: "#00673C", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>Traçabilité</Link>
-            <Link href="/location" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>Location</Link>
-            {isLoggedIn && <Link href="/client/dashboard" style={{ fontWeight: 700, color: "#C8941E", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>Mon espace</Link>}
+            <Link href="/reserver" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
+            <Link href="/agences" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
+            <Link href="/tracabilite" style={{ fontWeight: 700, color: "#00673C", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
+            <Link href="/location" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+            {isLoggedIn && <Link href="/client/dashboard" style={{ fontWeight: 700, color: "#C8941E", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("travelerSpace")}</Link>}
           </div>
         )}
       </header>
@@ -167,13 +184,13 @@ export default function TracabilitePage() {
       <section className="tracab-hero tracab-section-pad" style={{ maxWidth: 1200, margin: "0 auto", padding: "52px 24px 36px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
           <span style={{ background: "linear-gradient(90deg,#FCD116,#CE1126,#007A5E)", height: 3, width: 40, borderRadius: 99, display: "inline-block" }} />
-          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#718096", textTransform: "uppercase", letterSpacing: 2 }}>Suivi en temps réel</span>
+          <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#718096", textTransform: "uppercase", letterSpacing: 2 }}>{t("realTimeTracking")}</span>
         </div>
         <h1 style={{ fontSize: "clamp(1.6rem,4vw,2.4rem)", fontWeight: 900, color: "#0A2F1D", margin: "0 0 12px 0", lineHeight: 1.15 }}>
-          Traçabilité 100% Numérique
+          {t("title")}
         </h1>
         <p style={{ color: "#718096", fontSize: "1rem", maxWidth: 520, lineHeight: 1.6, margin: 0 }}>
-          Entrez la référence de votre colis ou billet pour suivre son état en temps réel, de l&apos;enregistrement jusqu&apos;à la livraison.
+          {t("desc")}
         </p>
       </section>
 
@@ -181,20 +198,20 @@ export default function TracabilitePage() {
       <section className="tracab-section-pad" style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px 48px" }}>
         <form onSubmit={handleSearch} className="tracab-search-form" style={{ background: "#fff", borderRadius: 20, border: "1px solid #E6E1D6", boxShadow: "0 8px 32px rgba(7,26,14,0.08)", padding: "28px 32px", marginBottom: 36 }}>
           <label style={{ fontSize: "0.75rem", fontWeight: 800, color: "#4a5568", textTransform: "uppercase", letterSpacing: 1, display: "block", marginBottom: 10 }}>
-            Référence de suivi (ID colis, QR ref, ou nom)
+            {t("searchLabel")}
           </label>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <input
               value={searchRef}
               onChange={e => setSearchRef(e.target.value)}
-              placeholder="ex: ST-2026-XXXXX ou COLIS-..."
+              placeholder={t("searchPlaceholder")}
               style={{ flex: "1 1 260px", background: "#f7fafc", border: "1.5px solid #e2e8f0", borderRadius: 12, padding: "12px 16px", fontSize: "0.95rem", outline: "none", fontFamily: "inherit", color: "#2d3748", minWidth: 0 }}
             />
             <button type="submit" disabled={searching || !searchRef.trim()} style={{ background: searching ? "#a0aec0" : "#0A2F1D", color: "#FCD116", fontWeight: 800, fontSize: "0.92rem", padding: "12px 28px", borderRadius: 12, border: "none", cursor: searching ? "not-allowed" : "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
               {searching ? (
-                <><div style={{ width: 16, height: 16, border: "2px solid rgba(252,209,22,0.3)", borderTopColor: "#FCD116", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> Recherche…</>
+                <><div style={{ width: 16, height: 16, border: "2px solid rgba(252,209,22,0.3)", borderTopColor: "#FCD116", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} /> {t("searching")}</>
               ) : (
-                <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Suivre</>
+                <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> {t("trackBtn")}</>
               )}
             </button>
           </div>
@@ -205,8 +222,8 @@ export default function TracabilitePage() {
           <div style={{ background: "#fff5f5", border: "1px solid #fed7d7", borderRadius: 16, padding: "24px 28px", marginBottom: 36, display: "flex", alignItems: "flex-start", gap: 16 }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c53030" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: 2 }}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
             <div>
-              <p style={{ fontWeight: 800, color: "#c53030", margin: "0 0 4px 0" }}>Colis introuvable</p>
-              <p style={{ color: "#718096", fontSize: "0.85rem", margin: 0 }}>Aucun colis correspondant à &laquo;&nbsp;<strong>{searchRef}</strong>&nbsp;&raquo;. Vérifiez la référence ou connectez-vous pour voir vos colis.</p>
+              <p style={{ fontWeight: 800, color: "#c53030", margin: "0 0 4px 0" }}>{t("notFound")}</p>
+              <p style={{ color: "#718096", fontSize: "0.85rem", margin: 0 }}>{t("notFoundDesc")} &laquo;&nbsp;<strong>{searchRef}</strong>&nbsp;&raquo;. {t("notFoundSuffix")}</p>
             </div>
           </div>
         )}
@@ -224,9 +241,9 @@ export default function TracabilitePage() {
                   />
                 </div>
                 <div>
-                  <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.5)", fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 1 }}>Colis identifié</p>
+                  <p style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.5)", fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 1 }}>{t("parcelIdentified")}</p>
                   <h3 style={{ color: "#fff", fontWeight: 800, fontSize: "1.1rem", margin: 0 }}>{result.label}</h3>
-                  <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.75rem", margin: 0 }}>Réf : {qrRef}</p>
+                  <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.75rem", margin: 0 }}>{t("ref")} : {qrRef}</p>
                 </div>
               </div>
               <span style={{ background: stepIdx >= 4 ? "rgba(74,222,128,0.15)" : "rgba(252,209,22,0.15)", border: `1px solid ${stepIdx >= 4 ? "rgba(74,222,128,0.3)" : "rgba(252,209,22,0.3)"}`, color: stepIdx >= 4 ? "#4ade80" : "#FCD116", fontSize: "0.72rem", fontWeight: 800, padding: "5px 14px", borderRadius: 99, textTransform: "uppercase" }}>
@@ -262,14 +279,14 @@ export default function TracabilitePage() {
             {/* Details grid */}
             <div className="tracab-result-details" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 18, padding: "24px 28px" }}>
               {[
-                { label: "Trajet", value: result.trip },
-                { label: "Type", value: result.type },
-                { label: "Poids", value: result.weight ? `${result.weight} kg` : "—" },
-                { label: "Couleur", value: result.color || "—" },
-                { label: "Expéditeur", value: result.senderName || result.sender_name || "—" },
-                { label: "Destinataire", value: result.receiverName || result.receiver_name || "—" },
-                { label: "Agence", value: result.agencyName || result.agency || "SafeTrip" },
-                { label: "Fragile", value: result.fragile ? "Oui — Fragile" : "Non" },
+                { label: t("detailRoute"), value: result.trip },
+                { label: t("detailType"), value: result.type },
+                { label: t("detailWeight"), value: result.weight ? `${result.weight} kg` : "—" },
+                { label: t("detailColor"), value: result.color || "—" },
+                { label: t("detailSender"), value: result.senderName || result.sender_name || "—" },
+                { label: t("detailReceiver"), value: result.receiverName || result.receiver_name || "—" },
+                { label: t("detailAgency"), value: result.agencyName || result.agency || "SafeTrip" },
+                { label: t("detailFragile"), value: result.fragile ? t("fragileYes") : t("fragileNo") },
               ].map(({ label, value }) => (
                 <div key={label} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                   <span style={{ fontSize: "0.62rem", color: "#a0aec0", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>{label}</span>
@@ -282,13 +299,13 @@ export default function TracabilitePage() {
 
         {/* ── HOW IT WORKS ── */}
         <div style={{ marginTop: 24 }}>
-          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#0A2F1D", marginBottom: 20 }}>Comment ça marche ?</h2>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 800, color: "#0A2F1D", marginBottom: 20 }}>{t("howItWorks")}</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 18 }}>
             {([
-              { icon: "clipboard" as IconName, title: "Enregistrement", desc: "Votre colis reçoit un QR code unique à l'agence." },
-              { icon: "scan"      as IconName, title: "Scan en gare",   desc: "Chaque passage en gare est scanné et enregistré." },
-              { icon: "bus"       as IconName, title: "À bord du bus",  desc: "Le colis est sécurisé et en route vers la destination." },
-              { icon: "check-circle" as IconName, title: "Livraison",   desc: "Notification à réception. Suivi complet disponible." },
+              { icon: "clipboard" as IconName, title: t("step_register"), desc: t("step_registerDesc") },
+              { icon: "scan"      as IconName, title: t("step_scan"),     desc: t("step_scanDesc") },
+              { icon: "bus"       as IconName, title: t("step_onboard"),  desc: t("step_onboardDesc") },
+              { icon: "check-circle" as IconName, title: t("step_delivery"), desc: t("step_deliveryDesc") },
             ] as { icon: IconName; title: string; desc: string }[]).map(item => (
               <div key={item.title} style={{ background: "#fff", borderRadius: 16, padding: "22px 20px", border: "1px solid #E6E1D6", boxShadow: "0 4px 16px rgba(7,26,14,0.05)" }}>
                 <div style={{ marginBottom: 14 }}>
@@ -304,7 +321,7 @@ export default function TracabilitePage() {
         {/* ── RECENT COLIS (if logged in & has local data) ── */}
         {recentColis.length > 0 && (
           <div style={{ marginTop: 40 }}>
-            <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0A2F1D", marginBottom: 16 }}>Vos colis récents</h2>
+            <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#0A2F1D", marginBottom: 16 }}>{t("recentParcels")}</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {recentColis.map(c => (
                 <div key={c.id} style={{ background: "#fff", borderRadius: 14, border: "1px solid #E6E1D6", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", cursor: "pointer", transition: "box-shadow 0.2s ease" }}
@@ -334,8 +351,8 @@ export default function TracabilitePage() {
       {/* Footer */}
       <footer style={{ background: "#0A2F1D", color: "rgba(255,255,255,0.6)", textAlign: "center", padding: "28px 24px", fontSize: "0.82rem" }}>
         <div style={{ height: 3, background: "linear-gradient(90deg,#FCD116,#CE1126,#007A5E)", marginBottom: 18, borderRadius: 99 }} />
-        <p style={{ margin: "0 0 6px 0", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>SafeTrip Cameroun — Traçabilité Numérique</p>
-        <p style={{ margin: 0 }}>© 2026 SafeTrip. Tous droits réservés. — Cameroun</p>
+        <p style={{ margin: "0 0 6px 0", fontWeight: 700, color: "rgba(255,255,255,0.85)" }}>{t("footerTitle")}</p>
+        <p style={{ margin: 0 }}>{t("footerCopyright")}</p>
       </footer>
     </div>
   );
