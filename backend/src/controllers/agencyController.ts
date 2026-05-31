@@ -425,17 +425,17 @@ export const scanPassengerLuggage = async (req: Request, res: Response) => {
           const routeFrom = j?.dep_station?.split(' - ')[0] || 'Départ';
           const routeTo = j?.arr_station?.split(' - ')[0] || 'Destination';
           await (supabase as any)
-            .from(‘notifications')
+            .from('notifications')
             .insert([{
               client_id: p.client_id,
-              type: ‘luggage_scanned',
-              title: ‘Bagage scanné à l\'embarquement',
+              type: 'luggage_scanned',
+              title: 'Bagage scanné à l\'embarquement',
               body: `${p.name} — Siège ${p.seat} — ${routeFrom} → ${routeTo}`,
               data: { passenger_id: passengerId, journey_id: p.journey_id, dep_time: j?.dep_time || null }
             }]);
-          emitNotification(‘client', p.client_id, {
-            type: ‘luggage_scanned',
-            title: ‘Bagage scanné à l\'embarquement',
+          emitNotification('client', p.client_id, {
+            type: 'luggage_scanned',
+            title: 'Bagage scanné à l\'embarquement',
             body: `${p.name} — Siège ${p.seat} — ${routeFrom} → ${routeTo}`,
           });
         }
@@ -489,22 +489,22 @@ export const scanTicket = async (req: Request, res: Response) => {
           const routeFrom = j?.dep_station?.split(' - ')[0] || 'Départ';
           const routeTo = j?.arr_station?.split(' - ')[0] || 'Destination';
           await (supabase as any)
-            .from(‘notifications')
+            .from('notifications')
             .insert([{
               client_id: passenger.client_id,
-              type: ‘ticket_validated',
-              title: ‘Billet validé à l\'embarquement',
+              type: 'ticket_validated',
+              title: 'Billet validé à l\'embarquement',
               body: `${passenger.name} — Siège ${passenger.seat} — ${routeFrom} → ${routeTo}`,
               data: { passenger_id: passenger.id, journey_id: passenger.journey_id, dep_time: j?.dep_time || null }
             }]);
-          emitNotification(‘client', passenger.client_id, {
-            type: ‘ticket_validated',
-            title: ‘Billet validé à l\'embarquement',
+          emitNotification('client', passenger.client_id, {
+            type: 'ticket_validated',
+            title: 'Billet validé à l\'embarquement',
             body: `${passenger.name} — Siège ${passenger.seat} — ${routeFrom} → ${routeTo}`,
           });
         }
       } catch { /* ignore notification errors */ }
-      return res.json({ status: ‘validated', passenger: updated });
+      return res.json({ status: 'validated', passenger: updated });
     }
     return res.json({ status: 'validated' });
   } catch (err: any) {
