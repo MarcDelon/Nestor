@@ -4,6 +4,7 @@ import "./globals.css";
 import SmartsuppChat from "@/components/SmartsuppChat";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import { UserProvider } from "@/components/UserContext";
+import AppShell from "@/components/AppShell";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -45,7 +46,9 @@ export default function RootLayout({
       <body className={`${dmSans.variable} ${syne.variable} ${montserrat.variable}`}>
         <UserProvider>
           <LanguageProvider>
-            {children}
+            <AppShell>
+              {children}
+            </AppShell>
             <SmartsuppChat />
           </LanguageProvider>
         </UserProvider>
