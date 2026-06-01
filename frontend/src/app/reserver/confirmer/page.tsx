@@ -177,7 +177,7 @@ export default function ConfirmerReservation() {
     // Fetch occupied seats for this journey from the backend
     if (journeyId) {
       const fetchOccupiedSeats = async () => {
-        const apiBase = (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app'));
+        const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
         try {
           const res = await fetch(`${apiBase}/api/agency/journeys/${journeyId}/occupied-seats`);
           if (res.ok) {
@@ -281,7 +281,7 @@ export default function ConfirmerReservation() {
     const clientId = user?.id || null;
     const name = user?.fullName || clientName || "Jean Client";
     const phone = phoneNumber || clientPhone;
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app'));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
 
     // Handle Card payment directly (Mock)
     if (paymentMethod === "carte") {
