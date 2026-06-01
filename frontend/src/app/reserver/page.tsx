@@ -206,7 +206,7 @@ export default function Reserver() {
 
     // 3. Fetch journeys list from the actual database API (public route — no auth needed)
     const fetchJourneys = async () => {
-      const apiBase = (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$($window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app'));
+      const apiBase = (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://`${window.location.hostname}`:5000` : 'https://safe-trip-backend.vercel.app'));
       try {
         const response = await fetch(`${apiBase}/api/agency/journeys/all`);
         if (response.ok) {
