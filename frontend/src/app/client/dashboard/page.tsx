@@ -68,9 +68,7 @@ interface Voucher {
 }
   const router = useRouter();
   const { user, loading: userLoading, logout: contextLogout, refresh: contextRefresh } = useUser();
-  const API_BASE = (process.env.NEXT_PUBLIC_API_URL
-    ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
-    : (typeof window !== 'undefined' ? window.location.origin : 'http://192.168.100.107:5000'));
+  const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
   const [email, setEmail] = useState("");
   const [clientActiveTab, setClientActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -189,7 +187,7 @@ interface Voucher {
   };
 
   const fetchNotifications = async () => {
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const res = await fetch(`${apiBase}/api/client/notifications`, { credentials: 'include', cache: 'no-store' });
       if (res.ok) {
@@ -206,7 +204,7 @@ interface Voucher {
   };
 
   const markAllNotificationsRead = async () => {
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const unread = (notifications || []).filter((n: any) => !n.read);
       await Promise.all(unread.map((n: any) => fetch(`${apiBase}/api/client/notifications/${n.id}/read`, { method: 'PUT', credentials: 'include' })));
@@ -226,7 +224,7 @@ interface Voucher {
 
   const handleRedeemPoints = async () => {
     if (loyaltyPoints < freeTripThreshold) return;
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const res = await fetch(`${apiBase}/api/client/loyalty/redeem`, { method: 'POST', credentials: 'include' });
       if (res.ok) {
@@ -299,7 +297,7 @@ interface Voucher {
 
   const handleSaveEditMessage = async () => {
     if (editingMsgId == null) return;
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     const passengerThreadId = email.split("@")[0] || "voyageur";
     const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
     const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
@@ -328,7 +326,7 @@ interface Voucher {
   };
 
   const handleDeleteMessage = async (msgId: number) => {
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     const passengerThreadId = email.split("@")[0] || "voyageur";
     const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
     const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
@@ -377,7 +375,7 @@ interface Voucher {
     setChatInputText("");
     setReplyToMsg(null);
 
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       await fetch(`${apiBase}/api/agency/messages/${targetThreadId}`, {
         method: "POST",
@@ -417,7 +415,7 @@ interface Voucher {
     if (clientActiveTab !== "messageries" || !email || !activeThreadId) return;
     
     const markAsRead = async () => {
-      const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+      const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
       const passengerThreadId = email.split("@")[0] || "voyageur";
       const targetThreadId = activeThreadId === "support" ? "support" : passengerThreadId;
       const targetAgencyId = activeThreadId === "support" ? 1 : parseInt(activeThreadId, 10) || 1;
@@ -454,7 +452,7 @@ interface Voucher {
   }, [user]);
 
   const fetchProfile = async () => {
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const res = await fetch(`${apiBase}/api/client/profile`, { credentials: "include", cache: "no-store" });
       if (res.ok) {
@@ -479,7 +477,7 @@ interface Voucher {
     if (!user) return;
 
     const hydrateClientData = async () => {
-      const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+      const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
       
       // 1. Fetch billets from API
       try {
@@ -832,7 +830,7 @@ interface Voucher {
   };
 
   const handleProfileSave = async () => {
-    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://$(window.location.hostname):5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const res = await fetch(`${apiBase}/api/client/profile`, {
         method: "PUT",

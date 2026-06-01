@@ -59,11 +59,7 @@ export default function LoginPage() {
       return;
     }
 
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL
-      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
-      : (typeof window !== 'undefined'
-          ? `${window.location.protocol}//${window.location.hostname}`
-          : 'http://192.168.100.107:5000'));
+    const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
@@ -141,11 +137,7 @@ export default function LoginPage() {
       return;
     }
 
-    const API_BASE = (process.env.NEXT_PUBLIC_API_URL
-      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
-      : (typeof window !== 'undefined'
-          ? `${window.location.protocol}//${window.location.hostname}`
-          : 'http://192.168.100.107:5000'));
+    const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
     try {
       const response = await fetch(`${API_BASE}/api/auth/signup`, {
         method: "POST",

@@ -32,13 +32,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL
-    ? process.env.NEXT_PUBLIC_API_URL
-    : (typeof window !== 'undefined'
-        ? (window.location.hostname.includes('loca.lt')
-            ? (process.env.NEXT_PUBLIC_API_URL || 'http://192.168.100.107:5000')
-            : `${window.location.protocol}//${window.location.hostname}:5000`)
-        : 'http://192.168.100.107:5000');
+  const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
 
   const refresh = async () => {
     try {

@@ -391,8 +391,8 @@ export default function LocationPage() {
     setSubmitting(true);
 
     try {
-      // 1. Sauvegarder dans la DB via l'API (en arrière-plan)
-      fetch("http://192.168.100.107:5000/api/agency/quote-request", {
+      const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
+      fetch(`${API_BASE}/api/agency/quote-request`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
