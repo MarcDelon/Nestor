@@ -8,8 +8,10 @@ import { useTranslations } from "next-intl";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useUser } from "@/components/UserContext";
 
-const API_BASE = `${((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')))}/api/agency`;
-const CLIENT_API_BASE = `${((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')))}/api/client`;
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL
+  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  : '');
+const CLIENT_API_BASE = API_BASE;
 
 interface DBError extends Error {
   message: string;
@@ -115,7 +117,7 @@ export default function AdminDashboard() {
 
       try {
         // 1. Fetch Agencies
-        const agenciesRes = await fetch(`${API_BASE}/agencies`, { headers: authHeaders, credentials: "include" });
+        const agenciesRes = await fetch(`${API_BASE}/api/agency/agencies`, { headers: authHeaders, credentials: "include" });
         let agenciesData: Agency[] = [];
         if (agenciesRes.ok) {
           agenciesData = await agenciesRes.json();
@@ -123,7 +125,7 @@ export default function AdminDashboard() {
         }
 
         // 2. Fetch Buses
-        const busesRes = await fetch(`${API_BASE}/buses`, { headers: authHeaders, credentials: "include" });
+        const busesRes = await fetch(`${API_BASE}/api/agency/buses`, { headers: authHeaders, credentials: "include" });
         let busesData: Bus[] = [];
         if (busesRes.ok) {
           busesData = await busesRes.json();
@@ -131,7 +133,7 @@ export default function AdminDashboard() {
         }
 
         // 3. Fetch Journeys
-        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers: authHeaders, credentials: "include" });
+        const journeysRes = await fetch(`${API_BASE}/api/agency/journeys/all`, { headers: authHeaders, credentials: "include" });
         let journeysData: Journey[] = [];
         if (journeysRes.ok) {
           const raw = await journeysRes.json();
@@ -145,7 +147,7 @@ export default function AdminDashboard() {
           await Promise.all(
             journeysData.map(async (j) => {
               try {
-                const pRes = await fetch(`${API_BASE}/passengers/${j.id}`, { headers: authHeaders, credentials: "include" });
+                const pRes = await fetch(`${API_BASE}/api/agency/passengers/${j.id}`, { headers: authHeaders, credentials: "include" });
                 if (pRes.ok) {
                    tempMap[j.id] = await pRes.json();
                 }
@@ -159,7 +161,7 @@ export default function AdminDashboard() {
 
         // 5. Fetch Vouchers from API
         try {
-          const vRes = await fetch(`${CLIENT_API_BASE}/admin/vouchers`, { headers: authHeaders, credentials: "include" });
+          const vRes = await fetch(`${CLIENT_API_BASE}/api/client/admin/vouchers`, { headers: authHeaders, credentials: "include" });
           if (vRes.ok) {
             const vData = await vRes.json();
             setVouchers(Array.isArray(vData) ? vData : []);
@@ -197,7 +199,7 @@ export default function AdminDashboard() {
     if (isNaN(maxUses) || maxUses <= 0) { setVoucherFormError(t("errMaxUsages")); return; }
 
     try {
-      const res = await fetch(`${CLIENT_API_BASE}/admin/vouchers`, {
+      const res = await fetch(`${CLIENT_API_BASE}/api/client/admin/vouchers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -218,7 +220,7 @@ export default function AdminDashboard() {
   const toggleVoucherStatus = async (v: Voucher) => {
     const newStatus = v.status === "published" ? "draft" : "published";
     try {
-      const res = await fetch(`${CLIENT_API_BASE}/admin/vouchers/${v.id}`, {
+      const res = await fetch(`${CLIENT_API_BASE}/api/client/admin/vouchers/${v.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -232,7 +234,7 @@ export default function AdminDashboard() {
 
   const deleteVoucher = async (v: Voucher) => {
     try {
-      const res = await fetch(`${CLIENT_API_BASE}/admin/vouchers/${v.id}`, {
+      const res = await fetch(`${CLIENT_API_BASE}/api/client/admin/vouchers/${v.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -289,7 +291,7 @@ export default function AdminDashboard() {
 
     try {
       if (editingAgency) {
-        const res = await fetch(`${API_BASE}/agencies/${editingAgency.id}`, {
+        const res = await fetch(`${API_BASE}/api/agency/agencies/${editingAgency.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -300,7 +302,7 @@ export default function AdminDashboard() {
         setAgencies(prev => prev.map(a => a.id === updated.id ? updated : a));
         showAgencyToast(t("agencyUpdated"));
       } else {
-        const res = await fetch(`${API_BASE}/agencies`, {
+        const res = await fetch(`${API_BASE}/api/agency/agencies`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -319,7 +321,7 @@ export default function AdminDashboard() {
 
   const handleDeleteAgency = async (id: number) => {
     try {
-      const res = await fetch(`${API_BASE}/agencies/${id}`, {
+      const res = await fetch(`${API_BASE}/api/agency/agencies/${id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

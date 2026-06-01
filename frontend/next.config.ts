@@ -9,6 +9,17 @@ const nextConfig: NextConfig = {
       { protocol: "http", hostname: "192.168.**" },
     ],
   },
+  async rewrites() {
+    const target = process.env.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+      : 'http://localhost:5000';
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${target}/api/:path*`,
+      },
+    ];
+  },
   turbopack: {
     root: process.cwd(),
   },

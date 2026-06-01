@@ -5,6 +5,7 @@ import SmartsuppChat from "@/components/SmartsuppChat";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import { UserProvider } from "@/components/UserContext";
 import AppShell from "@/components/AppShell";
+import WhatsAppButton from "@/components/WhatsAppButton";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -49,6 +50,7 @@ export default function RootLayout({
             <AppShell>
               {children}
             </AppShell>
+            <WhatsAppButton />
             <SmartsuppChat />
           </LanguageProvider>
         </UserProvider>

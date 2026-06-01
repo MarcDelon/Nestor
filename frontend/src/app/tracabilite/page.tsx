@@ -7,8 +7,9 @@ import type { IconName } from "@/components/Icons";
 import { useTranslations } from "next-intl";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { useUser } from "@/components/UserContext";
+import styles from "../page.module.css";
 
-const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
+const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : ((typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.'))) ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : 'https://safe-trip-backend.vercel.app')));
 
 interface ColisItem {
   id: string;
@@ -58,6 +59,19 @@ export default function TracabilitePage() {
   const { user } = useUser();
   const isLoggedIn = !!user;
   const userRole = user?.role || null;
+
+  const toggleConnection = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isLoggedIn) {
+      window.location.href = "/login";
+    } else if (userRole === "admin") {
+      window.location.href = "/admin/dashboard";
+    } else if (userRole === "agency") {
+      window.location.href = "/agence/dashboard";
+    } else {
+      window.location.href = "/client/dashboard";
+    }
+  };
 
   useEffect(() => {
     // Load recent colis from sessionStorage
@@ -126,49 +140,68 @@ export default function TracabilitePage() {
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(160deg,#F7F4EE 0%,#EDE9DF 100%)", fontFamily: "var(--font-body,'DM Sans',sans-serif)" }}>
 
-      {/* ── HEADER ── */}
-      <header style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(247,244,238,0.93)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(230,225,214,0.7)", padding: "14px 0" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <Link href="/"><img src="/images/logo-removebg-preview (2).png" alt="SafeTrip" style={{ height: 44, objectFit: "contain" }} /></Link>
-
-          {/* Desktop nav */}
-          <nav style={{ display: "flex", gap: 28, alignItems: "center" }} className="desktop-nav">
-            <Link href="/reserver" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("reserve")}</Link>
-            <Link href="/agences" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("agencies")}</Link>
-            <Link href="/tracabilite" style={{ fontWeight: 800, color: "#00673C", fontSize: "0.92rem", textDecoration: "none" }}>{tc("traceability")}</Link>
-            <Link href="/location" style={{ fontWeight: 650, color: "#1C2B22", fontSize: "0.92rem", textDecoration: "none" }}>{tc("rental")}</Link>
-            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ fontWeight: 650, color: "#C8941E", fontSize: "0.92rem", textDecoration: "none" }}>{tc("travelerSpace")}</Link>}
+      {/* Premium Unified Header */}
+      <header className={styles.header}>
+        <div className={styles.headerContent}>
+          <Link href="/" className={styles.logoContainer}>
+            <img 
+              src="/images/logo-removebg-preview (2).png" 
+              alt="SafeTrip Logo" 
+              className={styles.logoImage}
+            />
+          </Link>
+          <nav className={styles.nav}>
+            <Link href="/reserver">{tc("reserve")}</Link>
+            <Link href="/agences">{tc("agencies")}</Link>
+            <Link href="/tracabilite">{tc("traceability")}</Link>
+            <Link href="/location">{tc("rental")}</Link>
+            <Link href="/contact">Contact</Link>
+            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("admin")}</Link>}
+            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("myAgency")}</Link>}
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("travelerSpace")}</Link>}
           </nav>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <LanguageToggle />
-            <Link href="/login" style={{ background: "#00673C", color: "#fff", fontWeight: 700, fontSize: "0.88rem", padding: "9px 22px", borderRadius: 30, textDecoration: "none" }}>
-              {isLoggedIn ? tc("myAccount") : tc("login")}
-            </Link>
-            {/* Hamburger */}
-            <button onClick={() => setMobileMenuOpen(o => !o)} style={{ display: "none", background: "none", border: "none", cursor: "pointer", padding: 6 }} className="hamburger-btn" aria-label="Menu">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0A2F1D" strokeWidth="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-            </button>
-          </div>
+          <LanguageToggle />
+          <button onClick={toggleConnection} className={styles.headerBtn}>
+            {!isLoggedIn ? tc("login") : userRole === "admin" ? tc("admin") : userRole === "agency" ? tc("myAgency") : tc("mySpace")}
+          </button>
+          <button
+            className={styles.hamburgerBtn}
+            aria-label="Menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(o => !o); }}
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 24, height: 24, pointerEvents: 'none' }}>
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div style={{ background: "#fff", borderTop: "1px solid #E6E1D6", padding: "16px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-            <Link href="/reserver" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
-            <Link href="/agences" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
-            <Link href="/tracabilite" style={{ fontWeight: 700, color: "#00673C", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
-            <Link href="/location" style={{ fontWeight: 700, color: "#0A2F1D", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
-            {isLoggedIn && <Link href="/client/dashboard" style={{ fontWeight: 700, color: "#C8941E", textDecoration: "none", fontSize: "0.95rem" }} onClick={() => setMobileMenuOpen(false)}>{tc("travelerSpace")}</Link>}
-          </div>
+          <>
+            <div className={styles.mobileMenuBackdrop} onClick={() => setMobileMenuOpen(false)} />
+            <div className={styles.mobileMenu} role="menu">
+              <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
+              <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
+              <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
+              <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+              <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>Contact</Link>
+              {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("admin")}</Link>}
+              {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("myAgency")}</Link>}
+              {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("mySpace")}</Link>}
+              <button onClick={() => { toggleConnection(new MouseEvent('click') as any); setMobileMenuOpen(false); }} style={{ background: "#00673C", color: "#fff", fontWeight: 700, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {!isLoggedIn ? tc("login") : tc("myAccount")}
+              </button>
+            </div>
+          </>
         )}
       </header>
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @media (max-width: 767px) {
-          .desktop-nav { display: none !important; }
-          .hamburger-btn { display: flex !important; align-items: center; }
           .tracab-section-pad { padding-left: 14px !important; padding-right: 14px !important; }
           .tracab-search-form { padding: 20px 18px !important; }
           .tracab-result-header { padding: 16px 18px !important; }

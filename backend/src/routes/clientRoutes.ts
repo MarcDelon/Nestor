@@ -3,11 +3,15 @@ import {
   getClientBillets, getClientColis, reserveTicket, createColisRequest,
   getClientProfile, updateClientProfile, redeemLoyaltyPoints,
   getClientNotifications, markClientNotificationRead, getClientVouchers,
-  getAdminVouchers, createAdminVoucher, updateAdminVoucher, deleteAdminVoucher
+  getAdminVouchers, createAdminVoucher, updateAdminVoucher, deleteAdminVoucher,
+  contactSafeTrip
 } from '../controllers/clientController';
 import { requireAuth, requireRole } from '../middleware/authMiddleware';
 
 const router = Router();
+
+// Route publique: Contact
+router.post('/contact', contactSafeTrip);
 
 // Routes Voyageur / Client — toutes protégées
 router.get('/billets', requireAuth, getClientBillets);

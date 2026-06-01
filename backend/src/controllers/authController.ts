@@ -2,9 +2,15 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
-import { sendWelcomeEmail } from '../utils/mailer';
+import { sendWelcomeEmail, transporter } from '../utils/mailer';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'safetrip_super_secret_key_2026';
+const IS_PROD = process.env.NODE_ENV === 'production';
+const COOKIE_SAMESITE: 'lax' | 'none' = IS_PROD ? 'none' : 'lax';
+const COOKIE_SECURE = IS_PROD;
+
+// Memory store for password reset OTP codes (Key: email, Value: { code, expiresAt })
+const passwordResetCodes = new Map<string, { code: string; expiresAt: number }>();
 
 // Simulated database fallback matching the new unified central users structure
 const simulatedDatabase = {
@@ -149,8 +155,8 @@ export const signup = async (req: Request, res: Response) => {
       const token = jwt.sign({ id: newUser.id, email: newUser.email, role: userRole }, JWT_SECRET, { expiresIn: '24h' });
       res.cookie('safetrip_token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: COOKIE_SECURE,
+        sameSite: COOKIE_SAMESITE,
         maxAge: 24 * 60 * 60 * 1000
       });
       // Envoyer l'email de bienvenue de manière asynchrone (sans bloquer la réponse)
@@ -195,8 +201,8 @@ export const signup = async (req: Request, res: Response) => {
       const token = jwt.sign({ id: newUserId, email: lowerEmail, role: userRole }, JWT_SECRET, { expiresIn: '24h' });
       res.cookie('safetrip_token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: COOKIE_SECURE,
+        sameSite: COOKIE_SAMESITE,
         maxAge: 24 * 60 * 60 * 1000
       });
       // Envoyer l'email de bienvenue de manière asynchrone (sans bloquer la réponse)
@@ -275,13 +281,14 @@ export const login = async (req: Request, res: Response) => {
       const token = jwt.sign({ id: user.id, email: user.email, role: user.role, agencyId }, JWT_SECRET, { expiresIn: '24h' });
       res.cookie('safetrip_token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: COOKIE_SECURE,
+        sameSite: COOKIE_SAMESITE,
         maxAge: 24 * 60 * 60 * 1000
       });
       return res.status(200).json({
         message: `Connexion réussie en tant que ${user.role === 'admin' ? 'Administrateur' : user.role === 'agency' ? 'Agence' : 'Voyageur'}.`,
-        user: { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId }
+        user: { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId },
+        token
       });
     } else {
       // Simulation locale
@@ -317,13 +324,14 @@ export const login = async (req: Request, res: Response) => {
       const token = jwt.sign({ id: user.id, email: user.email, role: user.role, agencyId }, JWT_SECRET, { expiresIn: '24h' });
       res.cookie('safetrip_token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: COOKIE_SECURE,
+        sameSite: COOKIE_SAMESITE,
         maxAge: 24 * 60 * 60 * 1000
       });
       return res.status(200).json({
         message: `Connexion réussie en tant que ${user.role === 'admin' ? 'Administrateur' : user.role === 'agency' ? 'Agence' : 'Voyageur'} (Simulation).`,
-        user: { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId }
+        user: { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId },
+        token
       });
     }
   } catch (error: any) {
@@ -372,8 +380,10 @@ export const getMe = async (req: Request, res: Response) => {
         photo = admin?.photo || '/images/default_admin.png';
       }
 
+      const token = req.cookies?.safetrip_token || (req.headers.authorization ? req.headers.authorization.split(' ')[1] : undefined);
       return res.status(200).json({
-        user: { id: userPayload.id, email: userPayload.email, fullName, role: userPayload.role, photo, agencyId }
+        user: { id: userPayload.id, email: userPayload.email, fullName, role: userPayload.role, photo, agencyId },
+        token
       });
     } else {
       // Simulation locale
@@ -396,8 +406,10 @@ export const getMe = async (req: Request, res: Response) => {
         photo = admin?.photo || '/images/default_admin.png';
       }
 
+      const token = req.cookies?.safetrip_token || (req.headers.authorization ? req.headers.authorization.split(' ')[1] : undefined);
       return res.status(200).json({
-        user: { id: userPayload.id, email: userPayload.email, fullName, role: userPayload.role, photo, agencyId }
+        user: { id: userPayload.id, email: userPayload.email, fullName, role: userPayload.role, photo, agencyId },
+        token
       });
     }
   } catch (error: any) {
@@ -407,7 +419,306 @@ export const getMe = async (req: Request, res: Response) => {
 
 // 4. DECONNEXION / LOGOUT
 export const logout = async (req: Request, res: Response) => {
-  res.clearCookie('safetrip_token');
+  res.clearCookie('safetrip_token', { sameSite: COOKIE_SAMESITE, secure: COOKIE_SECURE });
   return res.status(200).json({ success: true, message: 'Déconnexion réussie.' });
 };
+
+// 5. MOT DE PASSE OUBLIE (Génération OTP et Envoi)
+export const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'L\'adresse email est requise.' });
+    }
+
+    const lowerEmail = email.toLowerCase();
+    let userExists = false;
+    let userFullName = 'Voyageur';
+
+    if (supabase) {
+      const { data: user } = await (supabase as any)
+        .from('users')
+        .select('id, role')
+        .eq('email', lowerEmail)
+        .maybeSingle();
+
+      if (user) {
+        userExists = true;
+        // Charger le nom pour personnaliser le mail
+        if (user.role === 'client') {
+          const { data: client } = await (supabase as any).from('clients').select('full_name').eq('id', user.id).maybeSingle();
+          if (client) userFullName = client.full_name;
+        } else if (user.role === 'agency') {
+          const { data: agency } = await (supabase as any).from('agencies').select('name').eq('user_id', user.id).maybeSingle();
+          if (agency) userFullName = agency.name;
+        } else if (user.role === 'admin') {
+          const { data: admin } = await (supabase as any).from('admins').select('full_name').eq('id', user.id).maybeSingle();
+          if (admin) userFullName = admin.full_name;
+        }
+      }
+    } else {
+      const user = simulatedDatabase.users.find(u => u.email.toLowerCase() === lowerEmail);
+      if (user) {
+        userExists = true;
+        if (user.role === 'client') {
+          const client = simulatedDatabase.clients.find(c => c.id === user.id);
+          if (client) userFullName = client.fullName;
+        } else if (user.role === 'agency') {
+          const agency = simulatedDatabase.agencies.find(a => a.user_id === user.id);
+          if (agency) userFullName = agency.name;
+        } else if (user.role === 'admin') {
+          const admin = simulatedDatabase.admins.find(a => a.id === user.id);
+          if (admin) userFullName = admin.fullName;
+        }
+      }
+    }
+
+    if (!userExists) {
+      return res.status(404).json({ error: 'Aucun compte n\'est associé à cette adresse email.' });
+    }
+
+    // Générer OTP à 6 chiffres
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes d'expiration
+
+    passwordResetCodes.set(lowerEmail, { code: otpCode, expiresAt });
+    console.log(`\n🔑 [PASSWORD RESET OTP] Email: ${lowerEmail} | Code: ${otpCode} | Expire dans: 15 min\n`);
+
+    // Envoi de l'email s'il est configuré
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Réinitialisation de votre mot de passe - SafeTrip</title>
+          <style>
+            body {
+              font-family: 'Helvetica Neue', Arial, sans-serif;
+              background-color: #f7fafc;
+              margin: 0;
+              padding: 0;
+            }
+            .container {
+              max-width: 600px;
+              margin: 40px auto;
+              background-color: #ffffff;
+              border-radius: 12px;
+              overflow: hidden;
+              box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+              border: 1px solid #e2e8f0;
+            }
+            .header {
+              background: linear-gradient(135deg, #0A2F1D 0%, #00673C 100%);
+              padding: 30px;
+              text-align: center;
+            }
+            .header h1 {
+              color: #FCD116;
+              margin: 0;
+              font-size: 28px;
+              letter-spacing: -0.5px;
+            }
+            .content {
+              padding: 40px 30px;
+              color: #2d3748;
+              line-height: 1.6;
+            }
+            .content h2 {
+              color: #0A2F1D;
+              font-size: 22px;
+              margin-top: 0;
+            }
+            .otp-container {
+              text-align: center;
+              margin: 30px 0;
+              padding: 20px;
+              background-color: #eef8f3;
+              border-radius: 8px;
+              border: 1px dashed #00673C;
+            }
+            .otp-code {
+              font-size: 36px;
+              font-weight: bold;
+              letter-spacing: 6px;
+              color: #0A2F1D;
+              margin: 0;
+            }
+            .footer {
+              background-color: #eef8f3;
+              padding: 20px;
+              text-align: center;
+              font-size: 12px;
+              color: #718096;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>SafeTrip</h1>
+            </div>
+            <div class="content">
+              <h2>Bonjour ${userFullName},</h2>
+              <p>Vous avez demandé la réinitialisation de votre mot de passe pour votre compte SafeTrip.</p>
+              <p>Veuillez utiliser le code de sécurité à 6 chiffres ci-dessous pour modifier votre mot de passe. Ce code est valable pendant <strong>15 minutes</strong>.</p>
+              
+              <div class="otp-container">
+                <p class="otp-code">${otpCode}</p>
+              </div>
+              
+              <p>Si vous n'avez pas demandé ce changement, vous pouvez ignorer cet e-mail en toute sécurité. Votre mot de passe actuel restera inchangé.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} SafeTrip Cameroun. Tous droits réservés.</p>
+              <p>Ceci est un message de sécurité automatique, merci de ne pas y répondre.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const mailOptions = {
+        from: `"SafeTrip Cameroun" <${process.env.SMTP_USER}>`,
+        to: lowerEmail,
+        subject: `Code de sécurité SafeTrip : ${otpCode} 🔑`,
+        html: htmlContent,
+      };
+
+      await transporter.sendMail(mailOptions);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Un code de validation vous a été envoyé par email.'
+    });
+  } catch (error: any) {
+    console.error('[FORGOT PASSWORD ERROR]', error);
+    return res.status(500).json({ error: error.message || 'Erreur lors du traitement de la demande.' });
+  }
+};
+
+// 6. VALIDATION OTP ET REINITIALISATION DU MOT DE PASSE (Avec auto-login)
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Champs requis manquants: email, code, newPassword.' });
+    }
+
+    const lowerEmail = email.toLowerCase();
+    const storedReset = passwordResetCodes.get(lowerEmail);
+
+    if (!storedReset) {
+      return res.status(400).json({ error: 'Aucun code de validation n\'a été demandé pour cette adresse email.' });
+    }
+
+    if (Date.now() > storedReset.expiresAt) {
+      passwordResetCodes.delete(lowerEmail);
+      return res.status(400).json({ error: 'Le code de validation a expiré. Veuillez faire une nouvelle demande.' });
+    }
+
+    if (storedReset.code !== code.trim()) {
+      return res.status(400).json({ error: 'Le code de validation est incorrect.' });
+    }
+
+    // Le code est correct, on hash le nouveau mot de passe
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    let loggedInUser: any = null;
+    let agencyId: number | undefined;
+
+    if (supabase) {
+      // 1. Mettre à jour dans la table centralisée users
+      const { error: updateError } = await (supabase as any)
+        .from('users')
+        .update({ password_hash: passwordHash })
+        .eq('email', lowerEmail);
+
+      if (updateError) {
+        return res.status(500).json({ error: 'Impossible de mettre à jour le mot de passe dans la base de données.' });
+      }
+
+      // 2. Charger le profil pour faire un auto-login direct
+      const { data: user } = await (supabase as any)
+        .from('users')
+        .select('*')
+        .eq('email', lowerEmail)
+        .single();
+
+      let fullName = '';
+      let photo = '';
+
+      if (user.role === 'client') {
+        const { data: client } = await (supabase as any).from('clients').select('full_name, photo').eq('id', user.id).maybeSingle();
+        fullName = client?.full_name || 'Voyageur';
+        photo = client?.photo || '/images/default_avatar.png';
+      } else if (user.role === 'agency') {
+        const { data: agency } = await (supabase as any).from('agencies').select('id, name, logo, photo').eq('user_id', user.id).maybeSingle();
+        fullName = agency?.name || 'Agence';
+        photo = agency?.logo || agency?.photo || '/images/default_agency.png';
+        agencyId = agency?.id;
+      } else if (user.role === 'admin') {
+        const { data: admin } = await (supabase as any).from('admins').select('full_name, photo').eq('id', user.id).maybeSingle();
+        fullName = admin?.full_name || 'Administrateur';
+        photo = admin?.photo || '/images/default_admin.png';
+      }
+
+      loggedInUser = { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId };
+    } else {
+      // Simulation locale
+      const user = simulatedDatabase.users.find(u => u.email.toLowerCase() === lowerEmail);
+      if (!user) {
+        return res.status(404).json({ error: 'Utilisateur introuvable.' });
+      }
+
+      user.passwordHash = passwordHash;
+
+      let fullName = '';
+      let photo = '';
+
+      if (user.role === 'client') {
+        const client = simulatedDatabase.clients.find(c => c.id === user.id);
+        fullName = client?.fullName || 'Voyageur';
+        photo = client?.photo || '/images/default_avatar.png';
+      } else if (user.role === 'agency') {
+        const agency = simulatedDatabase.agencies.find(a => a.user_id === user.id);
+        fullName = agency?.name || 'Agence';
+        photo = agency?.logo || '/images/default_agency.png';
+        agencyId = agency?.id;
+      } else if (user.role === 'admin') {
+        const admin = simulatedDatabase.admins.find(a => a.id === user.id);
+        fullName = admin?.fullName || 'Administrateur';
+        photo = admin?.photo || '/images/default_admin.png';
+      }
+
+      loggedInUser = { id: user.id, email: user.email, fullName, role: user.role, photo, agencyId };
+    }
+
+    // Supprimer le code OTP consommé
+    passwordResetCodes.delete(lowerEmail);
+
+    // Auto-login (génération du token de session)
+    const token = jwt.sign({ id: loggedInUser.id, email: loggedInUser.email, role: loggedInUser.role, agencyId }, JWT_SECRET, { expiresIn: '24h' });
+    res.cookie('safetrip_token', token, {
+      httpOnly: true,
+      secure: COOKIE_SECURE,
+      sameSite: COOKIE_SAMESITE,
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Mot de passe modifié avec succès. Vous êtes maintenant connecté !',
+      user: loggedInUser,
+      token
+    });
+  } catch (error: any) {
+    console.error('[RESET PASSWORD ERROR]', error);
+    return res.status(500).json({ error: error.message || 'Erreur lors de la réinitialisation du mot de passe.' });
+  }
+};
+
 

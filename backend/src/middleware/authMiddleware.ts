@@ -10,7 +10,15 @@ if (!JWT_SECRET) {
 const EFFECTIVE_SECRET = JWT_SECRET || 'safetrip_super_secret_key_2026';
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const token = req.cookies?.safetrip_token;
+  let token = req.cookies?.safetrip_token;
+
+  // Fallback to Authorization Header (Bearer token) for cross-origin environments where cookies might be blocked
+  if (!token && req.headers.authorization) {
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length === 2 && parts[0] === 'Bearer') {
+      token = parts[1];
+    }
+  }
 
   if (!token) {
     res.status(401).json({ error: 'Authentification requise. Veuillez vous connecter.' });

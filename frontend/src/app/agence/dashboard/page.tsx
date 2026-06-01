@@ -7,13 +7,23 @@ import Link from "next/link";
 import { useUser } from "@/components/UserContext";
 import { useSocket } from "@/components/useSocket";
 
-const API_BASE = `${((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')))}/api/agency`;
-const getAuthHeaders = () => ({
-  "Content-Type": "application/json",
-});
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL
+  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  : '');
+const getAuthHeaders = () => {
+  const token = typeof window !== "undefined" ? localStorage.getItem("safetrip_token") : null;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+};
 
 interface Journey {
   id: number;
+  agency_id: number;
   type: "bus";
   operator: string;
   logo: string;
@@ -129,11 +139,11 @@ export default function AgencyDashboard() {
   const [chatThreads, setChatThreads] = useState<{ [contactId: string]: ChatMessage[] }>({});
   const [chatInputText, setChatInputText] = useState("");
 
-  // Simulated Custom Agency Profile fields
-  const [profileEmail, setProfileEmail] = useState("contact@finexs.cm");
-  const [profilePhone, setProfilePhone] = useState("+237 699 90 90 90");
-  const [profileAddress, setProfileAddress] = useState("Douala - Rue Akwa, Cameroun");
-  const [profileDescription, setProfileDescription] = useState("Pionnier du transport VIP interurbain sécurisé au Cameroun. Voyages quotidiens Douala - Yaoundé.");
+  // Agency Profile fields - loaded from API
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileAddress, setProfileAddress] = useState("");
+  const [profileDescription, setProfileDescription] = useState("");
   const [profileEditing, setProfileEditing] = useState(false);
 
   // Bus CRUD modal state
@@ -323,6 +333,7 @@ export default function AgencyDashboard() {
     // Helper to map DB row to frontend Journey interface
     const mapDbJourney = (j: any): Journey => ({
       id: j.id,
+      agency_id: j.agency_id || 1,
       type: "bus",
       operator: j.operator,
       logo: j.logo,
@@ -384,18 +395,30 @@ export default function AgencyDashboard() {
 
     // Hydrate ALL data from backend API with localStorage fallback
     const hydrateFromApi = async () => {
+      console.log("🚀 Starting API hydration...");
+      console.log("📍 API_BASE:", API_BASE || "(empty string - will use relative /api)");
+      console.log("📍 NEXT_PUBLIC_API_URL:", process.env.NEXT_PUBLIC_API_URL || "(not set)");
       const storedAgencyId = user ? (user.agencyId || 1) : 1;
       const headers = getAuthHeaders();
 
       // 1. Fetch ALL journeys (not filtered — we filter client-side)
       try {
-        const journeysRes = await fetch(`${API_BASE}/journeys/all`, { headers, credentials: "include" });
+        const url = `${API_BASE}/api/agency/journeys/all`;
+        console.log("🔍 Fetching journeys from:", url);
+        const journeysRes = await fetch(url, { headers, credentials: "include" });
+        console.log("📊 Journeys response status:", journeysRes.status);
         if (journeysRes.ok) {
           const rawJourneys = await journeysRes.json();
+          console.log("✅ Raw journeys data:", rawJourneys);
           const journeysArr = Array.isArray(rawJourneys) ? rawJourneys : (rawJourneys && Array.isArray(rawJourneys.value) ? rawJourneys.value : []);
           const mapped = journeysArr.map(mapDbJourney);
+          console.log("✅ Mapped journeys:", mapped);
           setJourneysState(mapped);
-        } else { throw new Error("journeys API failed"); }
+        } else { 
+          const errText = await journeysRes.text();
+          console.error("❌ Journeys API error:", journeysRes.status, errText);
+          throw new Error("journeys API failed"); 
+        }
       } catch (err) {
         console.warn("⚠️ API trajets non joignable.", err);
         setJourneysState([]);
@@ -403,9 +426,12 @@ export default function AgencyDashboard() {
 
       // 2. Fetch buses
       try {
-        const busesRes = await fetch(`${API_BASE}/buses`, { headers, credentials: "include" });
+        console.log("🔍 Fetching buses from:", `${API_BASE}/api/agency/buses/all`);
+        const busesRes = await fetch(`${API_BASE}/api/agency/buses/all`, { headers, credentials: "include" });
+        console.log("📊 Buses response status:", busesRes.status);
         if (busesRes.ok) {
           const rawBuses = await busesRes.json();
+          console.log("✅ Raw buses data:", rawBuses);
           const busesArr = Array.isArray(rawBuses) ? rawBuses : (rawBuses && Array.isArray(rawBuses.value) ? rawBuses.value : []);
           setBusesState(busesArr.map(mapDbBus));
         }
@@ -416,9 +442,12 @@ export default function AgencyDashboard() {
 
       // 3. Fetch colis
       try {
-        const colisRes = await fetch(`${API_BASE}/colis`, { headers, credentials: "include" });
+        console.log("🔍 Fetching colis from:", `${API_BASE}/api/agency/colis/all`);
+        const colisRes = await fetch(`${API_BASE}/api/agency/colis/all`, { headers, credentials: "include" });
+        console.log("📊 Colis response status:", colisRes.status);
         if (colisRes.ok) {
           const rawColis = await colisRes.json();
+          console.log("✅ Raw colis data:", rawColis);
           const colisArr = Array.isArray(rawColis) ? rawColis : (rawColis && Array.isArray(rawColis.value) ? rawColis.value : []);
           setColisState(colisArr.map(mapDbColis));
         }
@@ -429,7 +458,7 @@ export default function AgencyDashboard() {
 
       // 4. Fetch all messages
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${storedAgencyId}`, { headers, credentials: "include" });
+        const msgRes = await fetch(`${API_BASE}/api/agency/all-messages?agency_id=${storedAgencyId}`, { headers, credentials: "include" });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -450,7 +479,7 @@ export default function AgencyDashboard() {
 
       // 5. Fetch agency profile
       try {
-        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${storedAgencyId}`, { headers, credentials: "include" });
+        const profileRes = await fetch(`${API_BASE}/api/agency/profile?agency_id=${storedAgencyId}`, { headers, credentials: "include" });
         if (profileRes.ok) {
           const p = await profileRes.json();
           if (p.email) setProfileEmail(p.email);
@@ -475,9 +504,11 @@ export default function AgencyDashboard() {
   const agencyLastUnreadRef = useRef(0);
 
   const fetchAgencyNotifications = async () => {
-    const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+      : '');
     try {
-      const res = await fetch(`${API_BASE}/notifications?agency_id=${currentAgencyId}`, { credentials: 'include' });
+      const res = await fetch(`${apiBase}/api/agency/notifications?agency_id=${currentAgencyId}`, { credentials: 'include' });
       if (res.ok) {
         const list = await res.json();
         setAgencyNotifications(list);
@@ -492,10 +523,12 @@ export default function AgencyDashboard() {
   };
 
   const markAgencyNotificationsRead = async () => {
-    const API_BASE = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL
+      ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+      : '');
     try {
       const unread = (agencyNotifications || []).filter((n: any) => !n.read);
-      await Promise.all(unread.map((n: any) => fetch(`${API_BASE}/notifications/${n.id}/read?agency_id=${currentAgencyId}`, { method: 'PUT', credentials: 'include' })));
+      await Promise.all(unread.map((n: any) => fetch(`${apiBase}/api/agency/notifications/${n.id}/read?agency_id=${currentAgencyId}`, { method: 'PUT', credentials: 'include' })));
       setAgencyNotifications((prev) => prev.map((n: any) => ({ ...n, read: true })));
       setAgencyUnread(0);
       agencyLastUnreadRef.current = 0;
@@ -509,9 +542,19 @@ export default function AgencyDashboard() {
   };
 
   // Filter journeys list to only display operations of the selected agency
-  const agencyJourneys = journeysState.filter(j => 
-    j.operator.toLowerCase().includes(selectedAgencyName.split(" ")[0].toLowerCase())
-  );
+  // Use agency_id from user context for reliable filtering
+  const currentAgencyIdForFilter = user ? (user.agencyId || 1) : 1;
+  const agencyJourneys = journeysState.filter(j => j.agency_id === currentAgencyIdForFilter);
+  
+  // Debug logging
+  if (journeysState.length > 0) {
+    console.log("🔍 DEBUG agencyJourneys filter:");
+    console.log("  user.agencyId:", user?.agencyId);
+    console.log("  currentAgencyIdForFilter:", currentAgencyIdForFilter);
+    console.log("  journeysState.length:", journeysState.length);
+    console.log("  agencyJourneys.length:", agencyJourneys.length);
+    console.log("  Sample journeys:", journeysState.slice(0, 3).map(j => ({ id: j.id, agency_id: j.agency_id, operator: j.operator })));
+  }
 
   const agencyJourneyGroups = agencyJourneys.reduce((groups, journey) => {
     const dep = journey.depStation.split(" - ")[0];
@@ -555,7 +598,7 @@ export default function AgencyDashboard() {
       const headers = getAuthHeaders();
       try {
         await Promise.all(journeysState.map(async (j) => {
-          const res = await fetch(`${API_BASE}/passengers/${j.id}`, { headers, credentials: "include" });
+          const res = await fetch(`${API_BASE}/api/agency/passengers/${j.id}`, { headers, credentials: "include" });
           if (res.ok) {
             const rawPassengers = await res.json();
             newPassengersMap[j.id] = rawPassengers.map((p: any) => ({
@@ -585,7 +628,8 @@ export default function AgencyDashboard() {
     const refetchForAgency = async () => {
       const headers = getAuthHeaders();
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
+        const agencyIdForApi = user ? (user.agencyId || 1) : 1;
+        const msgRes = await fetch(`${API_BASE}/api/agency/all-messages?agency_id=${agencyIdForApi}`, { headers, credentials: "include" });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -605,7 +649,7 @@ export default function AgencyDashboard() {
       }
 
       try {
-        const profileRes = await fetch(`${API_BASE}/profile?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
+        const profileRes = await fetch(`${API_BASE}/api/agency/profile?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
         if (profileRes.ok) {
           const p = await profileRes.json();
           setProfileEmail(p.email || "");
@@ -628,7 +672,8 @@ export default function AgencyDashboard() {
     const pollMessages = async () => {
       const headers = getAuthHeaders();
       try {
-        const msgRes = await fetch(`${API_BASE}/all-messages?agency_id=${currentAgencyId}`, { headers, credentials: "include" });
+        const agencyIdForApi = user ? (user.agencyId || 1) : 1;
+        const msgRes = await fetch(`${API_BASE}/api/agency/all-messages?agency_id=${agencyIdForApi}`, { headers, credentials: "include" });
         if (msgRes.ok) {
           const rawThreads = await msgRes.json();
           const mapped: { [contactId: string]: ChatMessage[] } = {};
@@ -684,7 +729,7 @@ export default function AgencyDashboard() {
     const markAsRead = async () => {
       try {
         const storedAgencyId = user ? (user.agencyId || 1) : 1;
-        await fetch(`${API_BASE}/messages/${activeContactId}/read?agency_id=${storedAgencyId}`, {
+        await fetch(`${API_BASE}/api/agency/messages/${activeContactId}/read?agency_id=${storedAgencyId}`, {
           method: "PUT",
           headers: getAuthHeaders(),
           credentials: "include",
@@ -783,7 +828,7 @@ export default function AgencyDashboard() {
     // POST new journey to backend API
     const createJourneyApi = async () => {
       try {
-        const res = await fetch(`${API_BASE}/journeys`, {
+        const res = await fetch(`${API_BASE}/api/agency/journeys`, {
           method: "POST",
           headers: getAuthHeaders(),
           credentials: "include",
@@ -806,6 +851,7 @@ export default function AgencyDashboard() {
           const created = await res.json();
           const newJourney: Journey = {
             id: created.id,
+            agency_id: created.agency_id || currentAgencyId,
             type: "bus",
             operator: created.operator,
             logo: created.logo,
@@ -830,6 +876,7 @@ export default function AgencyDashboard() {
         // Fallback to localStorage
         const newJourney: Journey = {
           id: Date.now(),
+          agency_id: currentAgencyId,
           type: "bus",
           operator: `${activeAgencyObj.name} ${selectedBusForJourney ? selectedBusForJourney.busClass : ""}`,
           logo: activeAgencyObj.logo,
@@ -865,7 +912,7 @@ export default function AgencyDashboard() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/journeys/${journeyId}`, {
+      const res = await fetch(`${API_BASE}/api/agency/journeys/${journeyId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
         credentials: "include"
@@ -941,7 +988,7 @@ export default function AgencyDashboard() {
       const headers = getAuthHeaders();
       if (editingBus) {
         // UPDATE
-        const res = await fetch(`${API_BASE}/buses/${editingBus.id}`, {
+        const res = await fetch(`${API_BASE}/api/agency/buses/${editingBus.id}`, {
           method: "PUT",
           headers,
           credentials: "include",
@@ -963,11 +1010,12 @@ export default function AgencyDashboard() {
           showToast("🚌 Le bus a été mis à jour avec succès !");
           setIsBusModalOpen(false);
         } else {
-          throw new Error("Erreur de mise à jour");
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Erreur de mise à jour");
         }
       } else {
         // CREATE
-        const res = await fetch(`${API_BASE}/buses`, {
+        const res = await fetch(`${API_BASE}/api/agency/buses`, {
           method: "POST",
           headers,
           credentials: "include",
@@ -989,7 +1037,8 @@ export default function AgencyDashboard() {
           showToast("🚌 Nouveau bus ajouté à votre flotte !");
           setIsBusModalOpen(false);
         } else {
-          throw new Error("Erreur d'ajout");
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Erreur d'ajout");
         }
       }
     } catch (err: any) {
@@ -1003,7 +1052,7 @@ export default function AgencyDashboard() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/buses/${id}`, {
+      const res = await fetch(`${API_BASE}/api/agency/buses/${id}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
         credentials: "include"
@@ -1037,7 +1086,7 @@ export default function AgencyDashboard() {
 
     // Persist to backend
     try {
-      await fetch(`${API_BASE}/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT", headers: getAuthHeaders(),
+      await fetch(`${API_BASE}/api/agency/passengers/${selectedJourneyId}/checkin/${passengerId}`, { method: "PUT", headers: getAuthHeaders(),
         credentials: "include" });
     } catch { /* silent fallback */ }
     
@@ -1066,7 +1115,7 @@ export default function AgencyDashboard() {
 
     // Persist scan to backend
     try {
-      await fetch(`${API_BASE}/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT", headers: getAuthHeaders(),
+      await fetch(`${API_BASE}/api/agency/passengers/${activeScanJourneyId}/scan/${scanningPassenger.id}`, { method: "PUT", headers: getAuthHeaders(),
         credentials: "include" });
     } catch { /* silent fallback */ }
 
@@ -1120,11 +1169,12 @@ export default function AgencyDashboard() {
 
     // Persist to backend
     try {
-      await fetch(`${API_BASE}/messages/${activeContactId}`, {
+      const agencyIdForApi = user ? (user.agencyId || 1) : 1;
+      await fetch(`${API_BASE}/api/agency/messages/${activeContactId}`, {
         method: "POST",
         headers: getAuthHeaders(),
         credentials: "include",
-        body: JSON.stringify({ sender: "agency", text: chatInputText, time: timeStr, agency_id: currentAgencyId })
+        body: JSON.stringify({ sender: "agency", text: newMsg.text, time: timeStr, agency_id: agencyIdForApi })
       });
     } catch { /* silent fallback */ }
   };
@@ -1141,7 +1191,7 @@ export default function AgencyDashboard() {
     };
 
     try {
-      await fetch(`${API_BASE}/profile`, {
+      await fetch(`${API_BASE}/api/agency/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(customProfile),
@@ -3723,7 +3773,10 @@ export default function AgencyDashboard() {
                             const senderTel = senderIdx > -1 ? lines.slice(senderIdx + 1).find(l => l.startsWith('Tél:'))?.replace('Tél:', '').trim() : null;
                             const colisRef = scanResult.data["Réf"] || scanResult.data["Ref"] || "N/A";
                             const agenceName = scanResult.data["Agence"] || selectedAgencyName;
-                            const res = await fetch(`${((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')))}/api/agency/notify-delivery`, {
+                            const apiBase = (process.env.NEXT_PUBLIC_API_URL
+                              ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+                              : '');
+                            const res = await fetch(`${apiBase}/api/agency/notify-delivery`, {
                               method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
                               body: JSON.stringify({ colisRef, agenceName, senderName: senderNom, senderPhone: senderTel, recipientName: destNom, recipientPhone: destTel })
                             });
@@ -3760,7 +3813,10 @@ export default function AgencyDashboard() {
                             const token = scanResult.data["Token"]; // New format preferred
                             if (token) {
                               setScanNotifStatus("sending");
-                              const res = await fetch(`${((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')))}/api/agency/tickets/scan`, {
+                              const apiBase = (process.env.NEXT_PUBLIC_API_URL
+                                ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+                                : '');
+                              const res = await fetch(`${apiBase}/api/agency/tickets/scan`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 credentials: 'include',

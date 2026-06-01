@@ -4,18 +4,24 @@
 
 /* Header */
 .header {
-  position: fixed;
+  position: sticky !important;
   top: 0;
   left: 0;
   width: 100%;
-  background: rgba(247, 244, 238, 0.92); /* Warm frosted cream */
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: transparent; /* Elegant transparent start */
   z-index: 1000;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(230, 225, 214, 0.7);
-  box-shadow: 0 4px 24px rgba(7, 26, 14, 0.05);
+  padding: 18px 0; /* Premium spacious padding at start */
+  border-bottom: 1px solid transparent;
   transition: all var(--transition-speed) ease;
+}
+
+.headerScrolled {
+  background: rgba(247, 244, 238, 0.92) !important; /* Warm frosted cream */
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  padding: 12px 0 !important;
+  border-bottom: 1px solid rgba(230, 225, 214, 0.7) !important;
+  box-shadow: 0 4px 24px rgba(7, 26, 14, 0.05) !important;
 }
 
 .headerContent {
@@ -396,7 +402,7 @@
 /* Dynamic Time & Weather Premium Card Widget (Mockup Style, transparent direct layout, compact view) */
 .heroWeatherWidgetCard {
   width: 160px; /* Extremely sleek, reduced width */
-  height: 70px; /* Snug height to save critical vertical space */
+  height: 95px; /* Elegant height to allow text to breathe without clipping */
   background: transparent;
   color: var(--primary-navy);
   display: flex;
@@ -405,7 +411,6 @@
   margin-top: 35px; /* Pushed down to leave a beautiful gap below the video card */
   margin-right: 8px; /* Perfect aligned offset on desktop */
   perspective: 1000px;
-  overflow: hidden;
   animation: widgetFadeIn 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
   user-select: none;
 }
@@ -942,7 +947,7 @@
 
 /* Agencies Section */
 .agenciesSection {
-  padding: 80px 0;
+  padding: 30px 0;
   background: var(--bg-light);
   text-align: center;
 }
@@ -1012,11 +1017,14 @@
 }
 
 .agencyLogo {
-  width: 60px;
-  height: 60px;
+  width: 65px;
+  height: 65px;
   object-fit: contain;
-  margin-bottom: 10px;
-  border-radius: 50px;
+  border-radius: 50%; /* Perfect round borders */
+  background: #ffffff; /* Fills logo canvas with white for beautiful round shape */
+  padding: 7px; /* Internal breathing room for the logo within the circle */
+  box-shadow: 0 4px 14px rgba(7, 26, 14, 0.08); /* Premium soft elevation for round logos */
+  transition: transform 0.2s ease;
 }
 
 /* Traceability Section */
@@ -2115,19 +2123,17 @@
 
 /* ── Agency marquee card upgrade ── */
 .agencyCard {
-  background: rgba(255,255,255,0.85);
-  border: 1.5px solid var(--border-warm);
-  border-radius: 16px;
-  padding: 14px 20px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 12px rgba(7,26,14,0.05);
-  transition: transform 0.25s cubic-bezier(0.16,1,0.3,1),
-              box-shadow 0.25s ease;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 40px; /* Generous horizontal padding for branding space */
+  backdrop-filter: none;
+  box-shadow: none;
+  transition: transform 0.25s cubic-bezier(0.16,1,0.3,1);
 }
 .agencyCard:hover {
-  transform: translateY(-5px) scale(1.03);
-  box-shadow: 0 14px 30px rgba(7,26,14,0.12);
-  border-color: rgba(0,103,60,0.2);
+  transform: scale(1.1);
+  box-shadow: none;
 }
 .agencyCard h3 {
   font-size: 0.82rem;

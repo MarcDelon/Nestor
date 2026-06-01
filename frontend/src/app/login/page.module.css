@@ -192,6 +192,39 @@
   margin-top: 20px;
 }
 
+.forgotPasswordLink {
+  align-self: flex-end;
+  font-size: 0.8rem;
+  color: #6B7D72;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+  margin-top: -6px;
+  cursor: pointer;
+}
+
+.forgotPasswordLink:hover {
+  color: #0B6B41;
+  text-decoration: underline;
+}
+
+.backToLoginBtn {
+  background: transparent;
+  color: #6B7D72;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  margin-top: 10px;
+  text-decoration: underline;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.backToLoginBtn:hover {
+  color: #071A0E;
+}
+
 .toast {
   position: fixed;
   bottom: 24px;

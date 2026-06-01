@@ -38,6 +38,7 @@ const router = Router();
 
 // Public routes (no auth required — used by passengers browsing)
 router.get('/agencies', getAgencies);
+router.get('/passengers/:journeyId', getPassengers);
 // Admin-only agency CRUD
 router.post('/agencies', requireAuth, requireRole('admin'), createAgency);
 router.put('/agencies/:id', requireAuth, requireRole('admin'), updateAgency);
@@ -61,6 +62,8 @@ router.get('/passengers/:journeyId', requireAuth, getPassengers);
 router.put('/passengers/:journeyId/checkin/:passengerId', requireAuth, checkinPassenger);
 router.put('/passengers/:journeyId/scan/:passengerId', requireAuth, scanPassengerLuggage);
 
+// Colis & Bagages
+router.get('/colis/all', getColis);
 router.get('/colis', requireAuth, getColis);
 router.put('/colis/:colisId/scan', requireAuth, scanColis);
 router.post('/notify-delivery', requireAuth, notifyDelivery);
@@ -70,7 +73,9 @@ router.post('/tickets/scan', requireAuth, scanTicket);
 router.get('/notifications', requireAuth, getAgencyNotifications);
 router.put('/notifications/:id/read', requireAuth, markAgencyNotificationRead);
 
-router.get('/all-messages', requireAuth, getAllMessages);
+// Messagerie Agence
+router.get('/messages/all', getAllMessages);
+router.get('/all-messages', getAllMessages);
 router.get('/messages/:threadId', requireAuth, getMessages);
 router.post('/messages/:threadId', requireAuth, sendMessage);
 router.put('/messages/:threadId/read', requireAuth, markMessagesAsRead);

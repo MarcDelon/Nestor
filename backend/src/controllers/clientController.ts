@@ -1021,3 +1021,43 @@ export const updateClientProfile = async (req: Request, res: Response) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+// ============================================================
+// CONTACT: POST /api/client/contact — Submit contact form
+// ============================================================
+export const contactSafeTrip = async (req: Request, res: Response) => {
+  try {
+    const { name, email, phone, message } = req.body;
+    
+    // Si SMTP_USER est configuré, on peut envoyer un mail de notification au support
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      const supportEmail = process.env.SMTP_USER;
+      const htmlContent = `
+        <h3>Nouveau message de contact - SafeTrip</h3>
+        <p><strong>Nom :</strong> ${name}</p>
+        <p><strong>Email :</strong> ${email || 'Non spécifié'}</p>
+        <p><strong>Téléphone :</strong> ${phone}</p>
+        <p><strong>Message :</strong></p>
+        <p>${message}</p>
+      `;
+      
+      await transporter.sendMail({
+        from: `"Contact SafeTrip" <${process.env.SMTP_USER}>`,
+        to: supportEmail,
+        subject: `Nouveau message de contact de ${name}`,
+        html: htmlContent
+      }).catch((err: any) => console.warn('[MAILER] Contact notification email failed:', err.message));
+    }
+    
+    console.log(`\n📬 [CONTACT FORM] Message reçu de ${name} (${phone}) : ${message}\n`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Votre message a été envoyé avec succès. Nous vous recontacterons sous peu !'
+    });
+  } catch (error: any) {
+    console.error('[CONTACT ERROR]', error);
+    return res.status(500).json({ error: error.message || 'Erreur lors de l\'envoi du message.' });
+  }
+};
+

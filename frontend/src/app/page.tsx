@@ -1,5 +1,5 @@
 "use client";
-
+// Force rebuild and hot-reload CSS classes
 import styles from "./page.module.css";
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
@@ -575,20 +575,21 @@ export default function Home() {
         />
       )}
       {/* Header */}
-      <header className={`${styles.header} ${showStickySearch ? styles.headerExpanded : ""}`}>
+      <header className={`${styles.header} ${scrolled ? styles.headerScrolled : ""} ${showStickySearch ? styles.headerExpanded : ""}`}>
         <div className={styles.headerContent}>
-          <div className={styles.logoContainer} id="tour-logo">
+          <Link href="/" className={styles.logoContainer} id="tour-logo">
             <img
               src="/images/logo-removebg-preview (2).png"
               alt="SafeTrip Logo"
               className={styles.logoImage}
             />
-          </div>
+          </Link>
           <nav className={styles.nav}>
             <Link href="/reserver" id="tour-reserve">{tc("reserve")}</Link>
             <Link href="/agences" id="tour-agences">{tc("agencies")}</Link>
             <Link href="/tracabilite" id="tour-traceability">{tc("traceability")}</Link>
             <Link href="/location" id="tour-rental">{tc("rental")}</Link>
+            <Link href="/contact">Contact</Link>
             {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("admin")}</Link>}
             {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("myAgency")}</Link>}
             {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("travelerSpace")}</Link>}
@@ -620,6 +621,7 @@ export default function Home() {
               <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
               <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
               <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+              <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>Contact</Link>
               {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("admin")}</Link>}
               {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("myAgency")}</Link>}
               {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("mySpace")}</Link>}
@@ -773,9 +775,8 @@ export default function Home() {
               {[...agencies, ...agencies].map((agency, index) => (
                 <div key={`${agency.name}-${index}`} className={styles.agencyCard}>
                   {agency.image && (
-                    <Image src={agency.image} alt={`Logo ${agency.name}`} width={50} height={50} className={styles.agencyLogo} />
+                    <Image src={agency.image} alt={`Logo ${agency.name}`} width={90} height={90} className={styles.agencyLogo} />
                   )}
-                  <h3>{agency.name}</h3>
                 </div>
               ))}
             </div>

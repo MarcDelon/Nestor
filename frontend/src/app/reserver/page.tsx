@@ -1,10 +1,13 @@
 "use client";
 
 import styles from "./page.module.css";
+import headerStyles from "../page.module.css";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useUser } from "@/components/UserContext";
+import { useTranslations } from "next-intl";
+import { LanguageToggle } from "@/components/LanguageToggle";
 
 interface Journey {
   id: number;
@@ -186,6 +189,8 @@ export default function Reserver() {
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [returnDate, setReturnDate] = useState("");
   const { user } = useUser();
+  const isLoggedIn = !!user;
+  const userRole = user?.role || null;
   const isAgencyLoggedIn = !!user && (user.role === "agency" || user.role === "admin");
   const [journeysState, setJourneysState] = useState<Journey[]>([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -193,6 +198,9 @@ export default function Reserver() {
   const [loading, setLoading] = useState(true);
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<string[]>([]);
+
+  const t = useTranslations("Reserver");
+  const tc = useTranslations("Common");
 
   useEffect(() => {
     // 2. Pre-fill search from URL params (from homepage search capsule)
@@ -206,7 +214,7 @@ export default function Reserver() {
 
     // 3. Fetch journeys list from the actual database API (public route — no auth needed)
     const fetchJourneys = async () => {
-      const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : (process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app')));
+      const apiBase = ((typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app')) ? 'https://safe-trip-backend.vercel.app' : ((typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.'))) ? `http://${window.location.hostname}:5000` : (process.env.NEXT_PUBLIC_API_URL ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '') : 'https://safe-trip-backend.vercel.app')));
       try {
         const response = await fetch(`${apiBase}/api/agency/journeys/all`);
         if (response.ok) {
@@ -249,7 +257,15 @@ export default function Reserver() {
 
   const toggleConnection = (e: React.MouseEvent) => {
     e.stopPropagation();
-    window.location.href = "/agence/dashboard";
+    if (!isLoggedIn) {
+      window.location.href = "/login";
+    } else if (userRole === "admin") {
+      window.location.href = "/admin/dashboard";
+    } else if (userRole === "agency") {
+      window.location.href = "/agence/dashboard";
+    } else {
+      window.location.href = "/client/dashboard";
+    }
   };
 
   // Filtering based on active search terms and selected amenities
@@ -333,46 +349,61 @@ export default function Reserver() {
   return (
     <main className={styles.main}>
       {/* Frosted Header */}
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <Link href="/" className={styles.logoContainer}>
+      <header className={headerStyles.header}>
+        <div className={headerStyles.headerContent}>
+          <Link href="/" className={headerStyles.logoContainer}>
             <img 
               src="/images/logo-removebg-preview (2).png" 
               alt="SafeTrip Logo" 
-              className={styles.logoImage}
+              className={headerStyles.logoImage}
             />
           </Link>
-          <nav className={styles.nav}>
-            <Link href="/reserver">Réserver</Link>
-            <Link href="/agences">Agences</Link>
-            <Link href="/tracabilite">Traçabilité</Link>
-            <Link href="/location">Location</Link>
-            {isAgencyLoggedIn && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>Admin</Link>}
+          <nav className={headerStyles.nav}>
+            <Link href="/reserver">{tc("reserve")}</Link>
+            <Link href="/agences">{tc("agencies")}</Link>
+            <Link href="/tracabilite">{tc("traceability")}</Link>
+            <Link href="/location">{tc("rental")}</Link>
+            <Link href="/contact">Contact</Link>
+            {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("admin")}</Link>}
+            {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("myAgency")}</Link>}
+            {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" style={{ color: "var(--accent-gold)", fontWeight: 800 }}>{tc("travelerSpace")}</Link>}
           </nav>
-          <button onClick={toggleConnection} className={styles.headerBtn}>
-            Connexion
+          <LanguageToggle />
+          <button onClick={toggleConnection} className={headerStyles.headerBtn}>
+            {!isLoggedIn ? tc("login") : userRole === "admin" ? tc("admin") : userRole === "agency" ? tc("myAgency") : tc("mySpace")}
           </button>
           <button
-            className={styles.hamburgerBtn}
+            className={headerStyles.hamburgerBtn}
             aria-label="Menu"
-            onClick={() => setMobileMenuOpen(o => !o)}
+            aria-expanded={mobileMenuOpen}
+            onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(o => !o); }}
+            type="button"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{width:24,height:24}}>
-              <line x1="3" y1="6" x2="21" y2="6"/>
-              <line x1="3" y1="12" x2="21" y2="12"/>
-              <line x1="3" y1="18" x2="21" y2="18"/>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 24, height: 24, pointerEvents: 'none' }}>
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
         </div>
 
         {mobileMenuOpen && (
-          <div className={styles.mobileMenu}>
-            <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>Réserver</Link>
-            <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>Agences</Link>
-            <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>Traçabilité</Link>
-            <Link href="/location" onClick={() => setMobileMenuOpen(false)}>Location</Link>
-            {isAgencyLoggedIn && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>Admin</Link>}
-          </div>
+          <>
+            <div className={headerStyles.mobileMenuBackdrop} onClick={() => setMobileMenuOpen(false)} />
+            <div className={headerStyles.mobileMenu} role="menu">
+              <Link href="/reserver" onClick={() => setMobileMenuOpen(false)}>{tc("reserve")}</Link>
+              <Link href="/agences" onClick={() => setMobileMenuOpen(false)}>{tc("agencies")}</Link>
+              <Link href="/tracabilite" onClick={() => setMobileMenuOpen(false)}>{tc("traceability")}</Link>
+              <Link href="/location" onClick={() => setMobileMenuOpen(false)}>{tc("rental")}</Link>
+              <Link href="/contact" onClick={() => setMobileMenuOpen(false)}>Contact</Link>
+              {isLoggedIn && userRole === "admin" && <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("admin")}</Link>}
+              {isLoggedIn && userRole === "agency" && <Link href="/agence/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("myAgency")}</Link>}
+              {isLoggedIn && userRole === "client" && <Link href="/client/dashboard" onClick={() => setMobileMenuOpen(false)}>{tc("mySpace")}</Link>}
+              <button onClick={() => { toggleConnection(new MouseEvent('click') as any); setMobileMenuOpen(false); }} style={{ background: "#00673C", color: "#fff", fontWeight: 700, padding: "10px 20px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                {!isLoggedIn ? tc("login") : tc("myAccount")}
+              </button>
+            </div>
+          </>
         )}
       </header>
 

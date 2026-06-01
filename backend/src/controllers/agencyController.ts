@@ -201,16 +201,25 @@ export const addBus = async (req: Request, res: Response) => {
   try {
     const { id, plaque, bus_class, capacity, occupied, status, amenities, agency_name } = req.body;
     if (supabase) {
-      const { data: ag } = await (supabase as any).from('agencies').select('id').ilike('name', `%${(agency_name || '').split(' ')[0]}%`).maybeSingle();
-      const agency_id = ag?.id || 1;
+      let agency_id = (req as any).user?.agencyId;
+      if (!agency_id) {
+        const { data: ag } = await (supabase as any).from('agencies').select('id').ilike('name', `%${(agency_name || '').split(' ')[0]}%`).maybeSingle();
+        agency_id = ag?.id || 1;
+      }
       const { data, error } = await (supabase as any).from('buses').insert([{ id, agency_id, plaque, bus_class, capacity: capacity || 50, occupied: occupied || 0, status: status || 'Disponible', amenities: amenities || [] }]).select().single();
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error('❌ Error adding bus in Supabase:', error);
+        return res.status(500).json({ error: error.message });
+      }
       return res.status(201).json(data);
     }
     const newBus = { id, agency_id: 1, plaque, bus_class, capacity: capacity || 50, occupied: occupied || 0, status: status || 'Disponible', amenities: amenities || [] };
     simBuses.push(newBus);
     return res.status(201).json(newBus);
-  } catch (err: any) { return res.status(500).json({ error: err.message }); }
+  } catch (err: any) {
+    console.error('❌ Exception in addBus:', err);
+    return res.status(500).json({ error: err.message });
+  }
 };
 
 // ============================================================
