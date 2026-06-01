@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useUser } from "@/components/UserContext";
 import { useSocket } from "@/components/useSocket";
 
-const API_BASE = `${(process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://`${window.location.hostname}`:5000` : 'https://safe-trip-backend.vercel.app'))}/api/agency`;
+const API_BASE = `${(process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app'))}/api/agency`;
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
 });
@@ -3723,7 +3723,7 @@ export default function AgencyDashboard() {
                             const senderTel = senderIdx > -1 ? lines.slice(senderIdx + 1).find(l => l.startsWith('Tél:'))?.replace('Tél:', '').trim() : null;
                             const colisRef = scanResult.data["Réf"] || scanResult.data["Ref"] || "N/A";
                             const agenceName = scanResult.data["Agence"] || selectedAgencyName;
-                            const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://`${window.location.hostname}`:5000` : 'https://safe-trip-backend.vercel.app'))}/api/agency/notify-delivery`, {
+                            const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app'))}/api/agency/notify-delivery`, {
                               method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
                               body: JSON.stringify({ colisRef, agenceName, senderName: senderNom, senderPhone: senderTel, recipientName: destNom, recipientPhone: destTel })
                             });
@@ -3760,7 +3760,7 @@ export default function AgencyDashboard() {
                             const token = scanResult.data["Token"]; // New format preferred
                             if (token) {
                               setScanNotifStatus("sending");
-                              const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://`${window.location.hostname}`:5000` : 'https://safe-trip-backend.vercel.app'))}/api/agency/tickets/scan`, {
+                              const res = await fetch(`${(process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.')) ? `http://${window.location.hostname}:5000` : 'https://safe-trip-backend.vercel.app'))}/api/agency/tickets/scan`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 credentials: 'include',
